@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"net/http"
 	"os"
 	"raptor/server"
 	"strconv"
@@ -63,7 +62,7 @@ var serveCmd = &cobra.Command{
 		srv := server.NewServer(db, hub, opts...)
 		addr := fmt.Sprintf(":%d", servePort)
 		fmt.Printf("Raptor server listening on %s\n", addr)
-		return http.ListenAndServe(addr, srv)
+		return srv.Echo.Start(addr)
 	},
 }
 

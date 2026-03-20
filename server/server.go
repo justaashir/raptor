@@ -4,14 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"net/http"
 	"log"
+	"net/http"
 	"raptor/model"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
 	"nhooyr.io/websocket"
 )
@@ -24,7 +23,7 @@ var allowedPatchFields = map[string]bool{
 type Server struct {
 	db           *DB
 	hub          *Hub
-	mux          *http.ServeMux
+	Echo         *echo.Echo
 	secret       string
 	allowedUsers []string
 }
@@ -40,18 +39,103 @@ func WithAllowedUsers(users []string) Option {
 }
 
 func NewServer(db *DB, hub *Hub, opts ...Option) *Server {
-	s := &Server{db: db, hub: hub, mux: http.NewServeMux()}
+	s := &Server{db: db, hub: hub, Echo: echo.New()}
+	s.Echo.HideBanner = true
+	s.Echo.HidePort = true
 	for _, o := range opts {
 		o(s)
 	}
-	s.mux.HandleFunc("/api/workspaces/", s.handleWorkspaces)
-	s.mux.HandleFunc("/api/version", s.handleVersion)
-	s.mux.HandleFunc("/api/skill", s.handleSkill)
-	s.mux.HandleFunc("/api/auth", s.handleAuth)
-	s.mux.HandleFunc("/install.sh", s.handleInstallScript)
-	s.mux.HandleFunc("/ws", s.handleWS)
+
+	// Public routes (no auth)
+	s.Echo.POST("/api/auth", s.handleAuth)
+	s.Echo.GET("/api/version", s.handleVersion)
+	s.Echo.GET("/api/skill", s.handleSkill)
+	s.Echo.GET("/install.sh", s.handleInstallScript)
+	s.Echo.GET("/ws", s.handleWS)
+
+	// Authenticated routes
+	api := s.Echo.Group("/api", s.authMiddleware)
+
+	// Workspaces
+	ws := api.Group("/workspaces")
+	ws.GET("/", s.listWorkspaces)
+	ws.POST("/", s.createWorkspace)
+	ws.DELETE("/:wid", s.deleteWorkspace)
+
+	// Workspace members
+	ws.GET("/:wid/members", s.listWorkspaceMembers)
+	ws.POST("/:wid/members", s.addWorkspaceMember)
+	ws.PATCH("/:wid/members/:username", s.updateWorkspaceMember)
+	ws.DELETE("/:wid/members/:username", s.removeWorkspaceMember)
+
+	// Boards
+	ws.GET("/:wid/boards", s.listBoards)
+	ws.POST("/:wid/boards", s.createBoard)
+	ws.DELETE("/:wid/boards/:bid", s.deleteBoard)
+
+	// Board members
+	ws.GET("/:wid/boards/:bid/members", s.listBoardMembers)
+	ws.POST("/:wid/boards/:bid/members", s.addBoardMember)
+	ws.DELETE("/:wid/boards/:bid/members/:username", s.removeBoardMember)
+
+	// Tickets
+	ws.GET("/:wid/boards/:bid/tickets", s.listTickets)
+	ws.POST("/:wid/boards/:bid/tickets", s.createTicket)
+	ws.GET("/:wid/boards/:bid/tickets/:tid", s.getTicket)
+	ws.PATCH("/:wid/boards/:bid/tickets/:tid", s.updateTicket)
+	ws.DELETE("/:wid/boards/:bid/tickets/:tid", s.deleteTicket)
+
 	return s
 }
+
+// ServeHTTP implements http.Handler so existing tests and serve.go work.
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.Echo.ServeHTTP(w, r)
+}
+
+// --- helpers ---
+
+func jsonErr(c echo.Context, code int, msg string) error {
+	return c.JSON(code, map[string]string{"error": msg})
+}
+
+func username(c echo.Context) string {
+	if u, ok := c.Get("username").(string); ok {
+		return u
+	}
+	return ""
+}
+
+// authorize checks if the user has at least minRole in the workspace.
+func (s *Server) authorize(c echo.Context, workspaceID, boardID, minRole string) error {
+	u := username(c)
+	if u == "" {
+		return errors.New("unauthorized")
+	}
+	role, err := s.db.GetMemberRole(workspaceID, u)
+	if err != nil {
+		return errors.New("not a workspace member")
+	}
+
+	roleLevel := map[string]int{"owner": 3, "admin": 2, "member": 1}
+	if roleLevel[role] < roleLevel[minRole] {
+		return errors.New("insufficient permissions")
+	}
+
+	if boardID != "" && role == "member" {
+		isMember, _ := s.db.IsBoardMember(boardID, u)
+		if !isMember {
+			return errors.New("no access to this board")
+		}
+	}
+	return nil
+}
+
+func genID() string {
+	return uuid.New().String()[:8]
+}
+
+// --- WebSocket (stays raw, Echo doesn't wrap WS well) ---
 
 type wsConn struct {
 	conn *websocket.Conn
@@ -62,576 +146,415 @@ func (w *wsConn) Send(msg []byte) error {
 	return w.conn.Write(w.ctx, websocket.MessageText, msg)
 }
 
-func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
-	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+func (s *Server) handleWS(c echo.Context) error {
+	ws, err := websocket.Accept(c.Response(), c.Request(), &websocket.AcceptOptions{
 		InsecureSkipVerify: true,
 	})
 	if err != nil {
-		return
+		return nil
 	}
-	defer c.Close(websocket.StatusNormalClosure, "")
+	defer ws.Close(websocket.StatusNormalClosure, "")
 
-	wc := &wsConn{conn: c, ctx: r.Context()}
+	wc := &wsConn{conn: ws, ctx: c.Request().Context()}
 	s.hub.Register(wc)
 	defer s.hub.Unregister(wc)
 
-	// Keep connection alive by reading (blocks until client disconnects)
 	for {
-		_, _, err := c.Read(r.Context())
+		_, _, err := ws.Read(c.Request().Context())
 		if err != nil {
-			return
+			return nil
 		}
 	}
 }
 
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.authMiddleware(s.mux).ServeHTTP(w, r)
-}
+// --- Workspace handlers ---
 
-// authorize checks if the user has at least minRole in the workspace.
-// For board access with "member" role, also checks board membership.
-func (s *Server) authorize(r *http.Request, workspaceID, boardID, minRole string) error {
-	username := UsernameFromContext(r.Context())
-	if username == "" {
-		return fmt.Errorf("unauthorized")
-	}
-	role, err := s.db.GetMemberRole(workspaceID, username)
+func (s *Server) listWorkspaces(c echo.Context) error {
+	workspaces, err := s.db.ListWorkspacesForUser(username(c))
 	if err != nil {
-		return fmt.Errorf("not a workspace member")
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
+	}
+	if workspaces == nil {
+		workspaces = []model.Workspace{}
+	}
+	return c.JSON(http.StatusOK, workspaces)
+}
+
+func (s *Server) createWorkspace(c echo.Context) error {
+	var input struct {
+		Name string `json:"name"`
+	}
+	if err := c.Bind(&input); err != nil {
+		return jsonErr(c, http.StatusBadRequest, "bad request")
+	}
+	if input.Name == "" {
+		return jsonErr(c, http.StatusBadRequest, "name required")
+	}
+	id := genID()
+	u := username(c)
+	if err := s.db.CreateWorkspace(id, input.Name, u); err != nil {
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
+	}
+	return c.JSON(http.StatusCreated, model.Workspace{ID: id, Name: input.Name, CreatedBy: u})
+}
+
+func (s *Server) deleteWorkspace(c echo.Context) error {
+	wid := c.Param("wid")
+	if err := s.authorize(c, wid, "", "owner"); err != nil {
+		return jsonErr(c, http.StatusForbidden, err.Error())
+	}
+	if err := s.db.DeleteWorkspace(wid); err != nil {
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// --- Workspace member handlers ---
+
+func (s *Server) listWorkspaceMembers(c echo.Context) error {
+	wid := c.Param("wid")
+	if err := s.authorize(c, wid, "", "member"); err != nil {
+		return jsonErr(c, http.StatusForbidden, err.Error())
+	}
+	members, err := s.db.ListWorkspaceMembers(wid)
+	if err != nil {
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
+	}
+	if members == nil {
+		members = []model.WorkspaceMember{}
+	}
+	return c.JSON(http.StatusOK, members)
+}
+
+func (s *Server) addWorkspaceMember(c echo.Context) error {
+	wid := c.Param("wid")
+	if err := s.authorize(c, wid, "", "admin"); err != nil {
+		return jsonErr(c, http.StatusForbidden, err.Error())
+	}
+	var input struct {
+		Username string `json:"username"`
+		Role     string `json:"role"`
+	}
+	if err := c.Bind(&input); err != nil {
+		return jsonErr(c, http.StatusBadRequest, "bad request")
+	}
+	if input.Role == "" {
+		input.Role = "member"
+	}
+	if !model.ValidRole(input.Role) {
+		return jsonErr(c, http.StatusBadRequest, "invalid role")
+	}
+	if err := s.db.AddWorkspaceMember(wid, input.Username, input.Role); err != nil {
+		if errors.Is(err, ErrAlreadyMember) {
+			return jsonErr(c, http.StatusConflict, "user is already a member of this workspace")
+		}
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
+	}
+	return c.JSON(http.StatusCreated, map[string]string{"username": input.Username, "role": input.Role})
+}
+
+func (s *Server) updateWorkspaceMember(c echo.Context) error {
+	wid := c.Param("wid")
+	user := c.Param("username")
+	if err := s.authorize(c, wid, "", "owner"); err != nil {
+		return jsonErr(c, http.StatusForbidden, err.Error())
+	}
+	var input struct {
+		Role string `json:"role"`
+	}
+	if err := c.Bind(&input); err != nil {
+		return jsonErr(c, http.StatusBadRequest, "bad request")
+	}
+	if !model.ValidRole(input.Role) {
+		return jsonErr(c, http.StatusBadRequest, "invalid role")
+	}
+	if err := s.db.UpdateMemberRole(wid, user, input.Role); err != nil {
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
+	}
+	return c.JSON(http.StatusOK, map[string]string{"username": user, "role": input.Role})
+}
+
+func (s *Server) removeWorkspaceMember(c echo.Context) error {
+	wid := c.Param("wid")
+	user := c.Param("username")
+	if err := s.authorize(c, wid, "", "admin"); err != nil {
+		return jsonErr(c, http.StatusForbidden, err.Error())
+	}
+	if err := s.db.RemoveWorkspaceMember(wid, user); err != nil {
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// --- Board handlers ---
+
+func (s *Server) listBoards(c echo.Context) error {
+	wid := c.Param("wid")
+	if err := s.authorize(c, wid, "", "member"); err != nil {
+		return jsonErr(c, http.StatusForbidden, err.Error())
+	}
+	boards, err := s.db.ListBoardsForUser(wid, username(c))
+	if err != nil {
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
+	}
+	if boards == nil {
+		boards = []model.Board{}
+	}
+	return c.JSON(http.StatusOK, boards)
+}
+
+func (s *Server) createBoard(c echo.Context) error {
+	wid := c.Param("wid")
+	if err := s.authorize(c, wid, "", "admin"); err != nil {
+		return jsonErr(c, http.StatusForbidden, err.Error())
+	}
+	var input struct {
+		Name string `json:"name"`
+	}
+	if err := c.Bind(&input); err != nil {
+		return jsonErr(c, http.StatusBadRequest, "bad request")
+	}
+	if input.Name == "" {
+		return jsonErr(c, http.StatusBadRequest, "name required")
+	}
+	id := genID()
+	u := username(c)
+	if err := s.db.CreateBoard(id, wid, input.Name, u); err != nil {
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
+	}
+	return c.JSON(http.StatusCreated, model.Board{ID: id, WorkspaceID: wid, Name: input.Name, CreatedBy: u})
+}
+
+func (s *Server) deleteBoard(c echo.Context) error {
+	wid := c.Param("wid")
+	bid := c.Param("bid")
+	if err := s.authorize(c, wid, "", "admin"); err != nil {
+		return jsonErr(c, http.StatusForbidden, err.Error())
+	}
+	if err := s.db.DeleteBoard(bid); err != nil {
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// --- Board member handlers ---
+
+func (s *Server) listBoardMembers(c echo.Context) error {
+	wid := c.Param("wid")
+	bid := c.Param("bid")
+	if err := s.authorize(c, wid, bid, "member"); err != nil {
+		return jsonErr(c, http.StatusForbidden, err.Error())
+	}
+	members, err := s.db.ListBoardMembers(bid)
+	if err != nil {
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
+	}
+	if members == nil {
+		members = []model.BoardMember{}
+	}
+	return c.JSON(http.StatusOK, members)
+}
+
+func (s *Server) addBoardMember(c echo.Context) error {
+	wid := c.Param("wid")
+	bid := c.Param("bid")
+	if err := s.authorize(c, wid, "", "admin"); err != nil {
+		return jsonErr(c, http.StatusForbidden, err.Error())
+	}
+	var input struct {
+		Username string `json:"username"`
+	}
+	if err := c.Bind(&input); err != nil {
+		return jsonErr(c, http.StatusBadRequest, "bad request")
+	}
+	if err := s.db.AddBoardMember(bid, input.Username); err != nil {
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
+	}
+	return c.JSON(http.StatusCreated, map[string]string{"username": input.Username, "board_id": bid})
+}
+
+func (s *Server) removeBoardMember(c echo.Context) error {
+	wid := c.Param("wid")
+	bid := c.Param("bid")
+	user := c.Param("username")
+	if err := s.authorize(c, wid, "", "admin"); err != nil {
+		return jsonErr(c, http.StatusForbidden, err.Error())
+	}
+	if err := s.db.RemoveBoardMember(bid, user); err != nil {
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
+// --- Ticket handlers ---
+
+func (s *Server) listTickets(c echo.Context) error {
+	wid := c.Param("wid")
+	bid := c.Param("bid")
+	if err := s.authorize(c, wid, bid, "member"); err != nil {
+		return jsonErr(c, http.StatusForbidden, err.Error())
+	}
+	u := username(c)
+
+	// Stats mode
+	if c.QueryParam("stats") == "true" {
+		counts, err := s.db.TicketStats(bid)
+		if err != nil {
+			return jsonErr(c, http.StatusInternalServerError, "internal server error")
+		}
+		total := 0
+		for _, cnt := range counts {
+			total += cnt
+		}
+		return c.JSON(http.StatusOK, map[string]any{"total": total, "counts": counts})
 	}
 
-	roleLevel := map[string]int{"owner": 3, "admin": 2, "member": 1}
-	if roleLevel[role] < roleLevel[minRole] {
-		return fmt.Errorf("insufficient permissions")
-	}
+	query := c.QueryParam("q")
+	all := c.QueryParam("all")
+	status := c.QueryParam("status")
+	mine := c.QueryParam("mine")
 
-	if boardID != "" && role == "member" {
-		isMember, _ := s.db.IsBoardMember(boardID, username)
+	var tickets []model.Ticket
+	var err error
+	if query != "" {
+		tickets, err = s.db.SearchTickets(bid, query)
+	} else if all == "true" {
+		tickets, err = s.db.ListAllTickets(bid)
+	} else {
+		tickets, err = s.db.ListTickets(bid, status)
+	}
+	if err != nil {
+		log.Printf("ticket list error: %v", err)
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
+	}
+	if mine == "true" && u != "" {
+		var filtered []model.Ticket
+		for _, t := range tickets {
+			if t.CreatedBy == u || t.Assignee == u {
+				filtered = append(filtered, t)
+			}
+		}
+		tickets = filtered
+	}
+	if tickets == nil {
+		tickets = []model.Ticket{}
+	}
+	return c.JSON(http.StatusOK, tickets)
+}
+
+func (s *Server) createTicket(c echo.Context) error {
+	wid := c.Param("wid")
+	bid := c.Param("bid")
+	if err := s.authorize(c, wid, bid, "member"); err != nil {
+		return jsonErr(c, http.StatusForbidden, err.Error())
+	}
+	u := username(c)
+
+	var input struct {
+		Title   string `json:"title"`
+		Content string `json:"content"`
+		Assign  string `json:"assignee"`
+	}
+	if err := c.Bind(&input); err != nil {
+		return jsonErr(c, http.StatusBadRequest, "bad request")
+	}
+	if input.Assign != "" {
+		isMember, _ := s.db.IsBoardMember(bid, input.Assign)
 		if !isMember {
-			return fmt.Errorf("no access to this board")
+			return jsonErr(c, http.StatusBadRequest, "assignee is not a board member")
 		}
 	}
-	return nil
+	ticket := model.NewTicket(input.Title, input.Content, u)
+	ticket.BoardID = bid
+	if input.Assign != "" {
+		ticket.Assignee = input.Assign
+		ticket.AssignedBy = u
+	}
+	if err := s.db.CreateTicket(ticket); err != nil {
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
+	}
+	s.hub.Broadcast([]byte(`{"event":"ticket_changed"}`))
+	return c.JSON(http.StatusCreated, ticket)
 }
 
-// handleWorkspaces dispatches all /api/workspaces/... routes
-func (s *Server) handleWorkspaces(w http.ResponseWriter, r *http.Request) {
-	path := strings.TrimPrefix(r.URL.Path, "/api/workspaces/")
-	path = strings.TrimSuffix(path, "/")
-	var parts []string
-	if path != "" {
-		parts = strings.Split(path, "/")
+func (s *Server) getTicket(c echo.Context) error {
+	wid := c.Param("wid")
+	bid := c.Param("bid")
+	tid := c.Param("tid")
+	if err := s.authorize(c, wid, bid, "member"); err != nil {
+		return jsonErr(c, http.StatusForbidden, err.Error())
+	}
+	ticket, err := s.db.GetTicket(tid)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return c.String(http.StatusNotFound, "not found")
+	}
+	if err != nil {
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
+	}
+	return c.JSON(http.StatusOK, ticket)
+}
+
+func (s *Server) updateTicket(c echo.Context) error {
+	wid := c.Param("wid")
+	bid := c.Param("bid")
+	tid := c.Param("tid")
+	if err := s.authorize(c, wid, bid, "member"); err != nil {
+		return jsonErr(c, http.StatusForbidden, err.Error())
 	}
 
-	switch len(parts) {
-	case 0:
-		s.handleWorkspaceRoot(w, r)
-	case 1:
-		s.handleWorkspaceByID(w, r, parts[0])
-	case 2:
-		switch parts[1] {
-		case "members":
-			s.handleWorkspaceMembers(w, r, parts[0])
-		case "boards":
-			s.handleBoards(w, r, parts[0])
-		default:
-			http.NotFound(w, r)
+	var fields map[string]any
+	if err := json.NewDecoder(c.Request().Body).Decode(&fields); err != nil {
+		return c.String(http.StatusBadRequest, "invalid request body")
+	}
+	// Whitelist allowed fields
+	for k := range fields {
+		if !allowedPatchFields[k] {
+			delete(fields, k)
 		}
-	case 3:
-		switch parts[1] {
-		case "members":
-			s.handleWorkspaceMember(w, r, parts[0], parts[2])
-		case "boards":
-			s.handleBoardByID(w, r, parts[0], parts[2])
-		default:
-			http.NotFound(w, r)
+	}
+	if len(fields) == 0 {
+		return jsonErr(c, http.StatusBadRequest, "no valid fields")
+	}
+	// Validate status
+	if st, ok := fields["status"].(string); ok {
+		if !model.ValidStatus(model.Status(st)) {
+			return jsonErr(c, http.StatusBadRequest, "invalid status")
 		}
-	case 4:
-		if parts[1] == "boards" {
-			switch parts[3] {
-			case "members":
-				s.handleBoardMembers(w, r, parts[0], parts[2])
-			case "tickets":
-				s.handleBoardTickets(w, r, parts[0], parts[2])
-			default:
-				http.NotFound(w, r)
-			}
+		if model.Status(st) == model.Closed {
+			fields["closed_at"] = time.Now()
 		} else {
-			http.NotFound(w, r)
-		}
-	case 5:
-		if parts[1] == "boards" {
-			switch parts[3] {
-			case "members":
-				s.handleBoardMember(w, r, parts[0], parts[2], parts[4])
-			case "tickets":
-				s.handleBoardTicket(w, r, parts[0], parts[2], parts[4])
-			default:
-				http.NotFound(w, r)
-			}
-		} else {
-			http.NotFound(w, r)
-		}
-	default:
-		http.NotFound(w, r)
-	}
-}
-
-func (s *Server) handleWorkspaceRoot(w http.ResponseWriter, r *http.Request) {
-	username := UsernameFromContext(r.Context())
-	switch r.Method {
-	case http.MethodGet:
-		workspaces, err := s.db.ListWorkspacesForUser(username)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if workspaces == nil {
-			workspaces = []model.Workspace{}
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(workspaces)
-
-	case http.MethodPost:
-		var input struct {
-			Name string `json:"name"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if input.Name == "" {
-			http.Error(w, `{"error":"name required"}`, http.StatusBadRequest)
-			return
-		}
-		id := uuid.New().String()[:8]
-		if err := s.db.CreateWorkspace(id, input.Name, username); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(model.Workspace{ID: id, Name: input.Name, CreatedBy: username})
-
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-func (s *Server) handleWorkspaceByID(w http.ResponseWriter, r *http.Request, wid string) {
-	switch r.Method {
-	case http.MethodDelete:
-		if err := s.authorize(r, wid, "", "owner"); err != nil {
-			http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusForbidden)
-			return
-		}
-		if err := s.db.DeleteWorkspace(wid); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-func (s *Server) handleWorkspaceMembers(w http.ResponseWriter, r *http.Request, wid string) {
-	switch r.Method {
-	case http.MethodGet:
-		if err := s.authorize(r, wid, "", "member"); err != nil {
-			http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusForbidden)
-			return
-		}
-		members, err := s.db.ListWorkspaceMembers(wid)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if members == nil {
-			members = []model.WorkspaceMember{}
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(members)
-
-	case http.MethodPost:
-		if err := s.authorize(r, wid, "", "admin"); err != nil {
-			http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusForbidden)
-			return
-		}
-		var input struct {
-			Username string `json:"username"`
-			Role     string `json:"role"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if input.Role == "" {
-			input.Role = "member"
-		}
-		if !model.ValidRole(input.Role) {
-			http.Error(w, `{"error":"invalid role"}`, http.StatusBadRequest)
-			return
-		}
-		if err := s.db.AddWorkspaceMember(wid, input.Username, input.Role); err != nil {
-			if errors.Is(err, ErrAlreadyMember) {
-				http.Error(w, `{"error":"user is already a member of this workspace"}`, http.StatusConflict)
-				return
-			}
-			http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{"username": input.Username, "role": input.Role})
-
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-func (s *Server) handleWorkspaceMember(w http.ResponseWriter, r *http.Request, wid, username string) {
-	switch r.Method {
-	case http.MethodPatch:
-		if err := s.authorize(r, wid, "", "owner"); err != nil {
-			http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusForbidden)
-			return
-		}
-		var input struct {
-			Role string `json:"role"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if !model.ValidRole(input.Role) {
-			http.Error(w, `{"error":"invalid role"}`, http.StatusBadRequest)
-			return
-		}
-		if err := s.db.UpdateMemberRole(wid, username, input.Role); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"username": username, "role": input.Role})
-
-	case http.MethodDelete:
-		if err := s.authorize(r, wid, "", "admin"); err != nil {
-			http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusForbidden)
-			return
-		}
-		if err := s.db.RemoveWorkspaceMember(wid, username); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-func (s *Server) handleBoards(w http.ResponseWriter, r *http.Request, wid string) {
-	username := UsernameFromContext(r.Context())
-	switch r.Method {
-	case http.MethodGet:
-		if err := s.authorize(r, wid, "", "member"); err != nil {
-			http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusForbidden)
-			return
-		}
-		boards, err := s.db.ListBoardsForUser(wid, username)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if boards == nil {
-			boards = []model.Board{}
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(boards)
-
-	case http.MethodPost:
-		if err := s.authorize(r, wid, "", "admin"); err != nil {
-			http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusForbidden)
-			return
-		}
-		var input struct {
-			Name string `json:"name"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if input.Name == "" {
-			http.Error(w, `{"error":"name required"}`, http.StatusBadRequest)
-			return
-		}
-		id := uuid.New().String()[:8]
-		if err := s.db.CreateBoard(id, wid, input.Name, username); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(model.Board{ID: id, WorkspaceID: wid, Name: input.Name, CreatedBy: username})
-
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-func (s *Server) handleBoardByID(w http.ResponseWriter, r *http.Request, wid, bid string) {
-	switch r.Method {
-	case http.MethodDelete:
-		if err := s.authorize(r, wid, "", "admin"); err != nil {
-			http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusForbidden)
-			return
-		}
-		if err := s.db.DeleteBoard(bid); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-func (s *Server) handleBoardMembers(w http.ResponseWriter, r *http.Request, wid, bid string) {
-	switch r.Method {
-	case http.MethodGet:
-		if err := s.authorize(r, wid, bid, "member"); err != nil {
-			http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusForbidden)
-			return
-		}
-		members, err := s.db.ListBoardMembers(bid)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if members == nil {
-			members = []model.BoardMember{}
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(members)
-
-	case http.MethodPost:
-		if err := s.authorize(r, wid, "", "admin"); err != nil {
-			http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusForbidden)
-			return
-		}
-		var input struct {
-			Username string `json:"username"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if err := s.db.AddBoardMember(bid, input.Username); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{"username": input.Username, "board_id": bid})
-
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-func (s *Server) handleBoardMember(w http.ResponseWriter, r *http.Request, wid, bid, username string) {
-	switch r.Method {
-	case http.MethodDelete:
-		if err := s.authorize(r, wid, "", "admin"); err != nil {
-			http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusForbidden)
-			return
-		}
-		if err := s.db.RemoveBoardMember(bid, username); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-func (s *Server) handleBoardTickets(w http.ResponseWriter, r *http.Request, wid, bid string) {
-	if err := s.authorize(r, wid, bid, "member"); err != nil {
-		http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusForbidden)
-		return
-	}
-	username := UsernameFromContext(r.Context())
-
-	switch r.Method {
-	case http.MethodGet:
-		// Server-side stats aggregation
-		if r.URL.Query().Get("stats") == "true" {
-			counts, err := s.db.TicketStats(bid)
-			if err != nil {
-				http.Error(w, "internal server error", http.StatusInternalServerError)
-				return
-			}
-			total := 0
-			for _, c := range counts {
-				total += c
-			}
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]any{"total": total, "counts": counts})
-			return
-		}
-
-		status := r.URL.Query().Get("status")
-		mine := r.URL.Query().Get("mine")
-		all := r.URL.Query().Get("all")
-		query := r.URL.Query().Get("q")
-		var tickets []model.Ticket
-		var err error
-		if query != "" {
-			tickets, err = s.db.SearchTickets(bid, query)
-		} else if all == "true" {
-			tickets, err = s.db.ListAllTickets(bid)
-		} else {
-			tickets, err = s.db.ListTickets(bid, status)
-		}
-		if err != nil {
-			log.Printf("ticket list error: %v", err)
-			http.Error(w, "internal server error", http.StatusInternalServerError)
-			return
-		}
-		if mine == "true" && username != "" {
-			var filtered []model.Ticket
-			for _, t := range tickets {
-				if t.CreatedBy == username || t.Assignee == username {
-					filtered = append(filtered, t)
-				}
-			}
-			tickets = filtered
-		}
-		if tickets == nil {
-			tickets = []model.Ticket{}
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(tickets)
-
-	case http.MethodPost:
-		var input struct {
-			Title   string `json:"title"`
-			Content string `json:"content"`
-			Assign  string `json:"assignee"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if input.Assign != "" {
-			isMember, _ := s.db.IsBoardMember(bid, input.Assign)
-			if !isMember {
-				http.Error(w, `{"error":"assignee is not a board member"}`, http.StatusBadRequest)
-				return
+			fields["closed_at"] = gorm.Expr("NULL")
+			if _, hasReason := fields["close_reason"]; !hasReason {
+				fields["close_reason"] = ""
 			}
 		}
-		ticket := model.NewTicket(input.Title, input.Content, username)
-		ticket.BoardID = bid
-		if input.Assign != "" {
-			ticket.Assignee = input.Assign
-			ticket.AssignedBy = username
-		}
-		if err := s.db.CreateTicket(ticket); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		s.hub.Broadcast([]byte(`{"event":"ticket_changed"}`))
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(ticket)
-
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+	if assignee, ok := fields["assignee"].(string); ok && assignee != "" {
+		isMember, _ := s.db.IsBoardMember(bid, assignee)
+		if !isMember {
+			return jsonErr(c, http.StatusBadRequest, "assignee is not a board member")
+		}
+		fields["assigned_by"] = username(c)
+	}
+	if err := s.db.UpdateTicket(tid, fields); err != nil {
+		log.Printf("ticket update error: %v", err)
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
+	}
+	s.hub.Broadcast([]byte(`{"event":"ticket_changed"}`))
+	ticket, _ := s.db.GetTicket(tid)
+	return c.JSON(http.StatusOK, ticket)
 }
 
-func (s *Server) handleBoardTicket(w http.ResponseWriter, r *http.Request, wid, bid, tid string) {
-	if err := s.authorize(r, wid, bid, "member"); err != nil {
-		http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusForbidden)
-		return
+func (s *Server) deleteTicket(c echo.Context) error {
+	wid := c.Param("wid")
+	bid := c.Param("bid")
+	tid := c.Param("tid")
+	if err := s.authorize(c, wid, bid, "member"); err != nil {
+		return jsonErr(c, http.StatusForbidden, err.Error())
 	}
-
-	switch r.Method {
-	case http.MethodGet:
-		ticket, err := s.db.GetTicket(tid)
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			http.Error(w, "not found", http.StatusNotFound)
-			return
-		}
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(ticket)
-
-	case http.MethodPatch:
-		var fields map[string]any
-		if err := json.NewDecoder(r.Body).Decode(&fields); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
-			return
-		}
-		// Whitelist allowed fields to prevent mass assignment
-		for k := range fields {
-			if !allowedPatchFields[k] {
-				delete(fields, k)
-			}
-		}
-		if len(fields) == 0 {
-			http.Error(w, `{"error":"no valid fields"}`, http.StatusBadRequest)
-			return
-		}
-		// Validate status if provided
-		if s, ok := fields["status"].(string); ok {
-			if !model.ValidStatus(model.Status(s)) {
-				http.Error(w, `{"error":"invalid status"}`, http.StatusBadRequest)
-				return
-			}
-			// Set closed_at server-side on status transitions
-			if model.Status(s) == model.Closed {
-				fields["closed_at"] = time.Now()
-			} else {
-				// Clear close fields when reopening
-				fields["closed_at"] = gorm.Expr("NULL")
-				if _, hasReason := fields["close_reason"]; !hasReason {
-					fields["close_reason"] = ""
-				}
-			}
-		}
-		if assignee, ok := fields["assignee"].(string); ok && assignee != "" {
-			isMember, _ := s.db.IsBoardMember(bid, assignee)
-			if !isMember {
-				http.Error(w, `{"error":"assignee is not a board member"}`, http.StatusBadRequest)
-				return
-			}
-			fields["assigned_by"] = UsernameFromContext(r.Context())
-		}
-		if err := s.db.UpdateTicket(tid, fields); err != nil {
-			log.Printf("ticket update error: %v", err)
-			http.Error(w, "internal server error", http.StatusInternalServerError)
-			return
-		}
-		s.hub.Broadcast([]byte(`{"event":"ticket_changed"}`))
-		ticket, _ := s.db.GetTicket(tid)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(ticket)
-
-	case http.MethodDelete:
-		if err := s.db.DeleteTicket(tid); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		s.hub.Broadcast([]byte(`{"event":"ticket_changed"}`))
-		w.WriteHeader(http.StatusNoContent)
-
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	if err := s.db.DeleteTicket(tid); err != nil {
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
+	s.hub.Broadcast([]byte(`{"event":"ticket_changed"}`))
+	return c.NoContent(http.StatusNoContent)
 }

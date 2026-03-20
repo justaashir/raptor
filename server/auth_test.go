@@ -65,13 +65,22 @@ func TestValidateToken_InvalidFormat(t *testing.T) {
 
 func TestAuthMiddleware_PublicRoutes(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
-	for _, path := range []string{"/api/version", "/api/auth", "/install.sh"} {
+	// GET routes
+	for _, path := range []string{"/api/version", "/install.sh"} {
 		req := httptest.NewRequest("GET", path, nil)
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
 		if w.Code == http.StatusUnauthorized {
 			t.Fatalf("expected public route %s to not require auth, got 401", path)
 		}
+	}
+	// POST-only route
+	req := httptest.NewRequest("POST", "/api/auth", strings.NewReader(`{"username":"alice"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code == http.StatusUnauthorized {
+		t.Fatalf("expected public route /api/auth to not require auth, got 401")
 	}
 }
 
@@ -104,6 +113,7 @@ func TestHandleAuth_AllowedUser(t *testing.T) {
 
 	body := `{"username":"alice"}`
 	req := httptest.NewRequest("POST", "/api/auth", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
@@ -135,6 +145,7 @@ func TestHandleAuth_DisallowedUser(t *testing.T) {
 
 	body := `{"username":"eve"}`
 	req := httptest.NewRequest("POST", "/api/auth", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
@@ -148,6 +159,7 @@ func TestHandleAuth_EmptyUsername(t *testing.T) {
 
 	body := `{"username":""}`
 	req := httptest.NewRequest("POST", "/api/auth", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 

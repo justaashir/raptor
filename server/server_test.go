@@ -321,6 +321,7 @@ func TestServer_Auth_ChecksWorkspaceMembership(t *testing.T) {
 
 	body := `{"username":"alice"}`
 	req := httptest.NewRequest("POST", "/api/auth", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -329,6 +330,7 @@ func TestServer_Auth_ChecksWorkspaceMembership(t *testing.T) {
 
 	body = `{"username":"eve"}`
 	req = httptest.NewRequest("POST", "/api/auth", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusForbidden {
