@@ -283,11 +283,13 @@ func (a *App) View() string {
 	listView := listStyle.
 		Width(listW).
 		Height(contentH).
+		MaxHeight(contentH).
 		Render(listContent)
 
 	detailView := detailStyle.
 		Width(detailW).
 		Height(contentH).
+		MaxHeight(contentH).
 		Render(a.detailPane.View())
 
 	panes := lipgloss.JoinHorizontal(lipgloss.Top, listView, detailView)
