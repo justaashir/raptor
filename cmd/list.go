@@ -3,8 +3,10 @@ package cmd
 import (
 	"fmt"
 	"raptor/client"
+	"raptor/model"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/table"
 	"github.com/spf13/cobra"
 )
 
@@ -14,11 +16,44 @@ var (
 	listAll    bool
 )
 
-var statusStyle = map[string]lipgloss.Style{
-	"todo":        lipgloss.NewStyle().Foreground(lipgloss.Color("12")),
-	"in_progress": lipgloss.NewStyle().Foreground(lipgloss.Color("11")),
-	"done":        lipgloss.NewStyle().Foreground(lipgloss.Color("10")),
-	"closed":      lipgloss.NewStyle().Foreground(lipgloss.Color("8")),
+var statusColors = map[string]lipgloss.Color{
+	"todo":        lipgloss.Color("12"),
+	"in_progress": lipgloss.Color("11"),
+	"done":        lipgloss.Color("10"),
+	"closed":      lipgloss.Color("8"),
+}
+
+var headerStyle = lipgloss.NewStyle().Bold(true).Padding(0, 1)
+var cellStyle = lipgloss.NewStyle().Padding(0, 1)
+
+func renderTicketTable(tickets []model.Ticket) string {
+	t := table.New().
+		Border(lipgloss.RoundedBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("238"))).
+		Headers("ID", "Status", "Title", "Assignee").
+		StyleFunc(func(row, col int) lipgloss.Style {
+			if row == table.HeaderRow {
+				return headerStyle
+			}
+			s := cellStyle
+			// Color the status column
+			if col == 1 && row >= 0 && row < len(tickets) {
+				status := string(tickets[row].Status)
+				if c, ok := statusColors[status]; ok {
+					s = s.Foreground(c)
+				}
+			}
+			return s
+		})
+
+	for _, tk := range tickets {
+		t.Row(tk.ID, string(tk.Status), tk.Title, tk.Assignee)
+	}
+
+	title := lipgloss.NewStyle().Bold(true).Italic(true).
+		Render(fmt.Sprintf("Tickets (%d)", len(tickets)))
+
+	return fmt.Sprintf("        %s\n%s", title, t.Render())
 }
 
 var listCmd = &cobra.Command{
@@ -41,17 +76,7 @@ var listCmd = &cobra.Command{
 			fmt.Println("No tickets found.")
 			return nil
 		}
-		for _, t := range tickets {
-			style := statusStyle[string(t.Status)]
-			line := fmt.Sprintf("%s  %s  %s", t.ID, style.Render(string(t.Status)), t.Title)
-			if t.Assignee != "" {
-				line += fmt.Sprintf("  [@%s]", t.Assignee)
-			}
-			if t.CreatedBy != "" {
-				line += fmt.Sprintf("  (by %s)", t.CreatedBy)
-			}
-			fmt.Println(line)
-		}
+		fmt.Println(renderTicketTable(tickets))
 		return nil
 	},
 }

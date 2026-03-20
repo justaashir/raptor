@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"raptor/client"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -17,7 +18,7 @@ var closeCmd = &cobra.Command{
 		if err := requireBoard(); err != nil {
 			return err
 		}
-		c := NewScopedClient(serverURL, authToken, activeWS, activeBoard)
+		c := client.NewScoped(serverURL, authToken, activeWS, activeBoard)
 		fields := map[string]any{
 			"status":    "closed",
 			"closed_at": time.Now(),

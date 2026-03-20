@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"raptor/client"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -16,7 +17,7 @@ var searchCmd = &cobra.Command{
 			return err
 		}
 		query := strings.Join(args, " ")
-		c := NewScopedClient(serverURL, authToken, activeWS, activeBoard)
+		c := client.NewScoped(serverURL, authToken, activeWS, activeBoard)
 		tickets, err := c.SearchTickets(query)
 		if err != nil {
 			return err
@@ -29,14 +30,7 @@ var searchCmd = &cobra.Command{
 			fmt.Println("No tickets found.")
 			return nil
 		}
-		for _, t := range tickets {
-			style := statusStyle[string(t.Status)]
-			line := fmt.Sprintf("%s  %s  %s", t.ID, style.Render(string(t.Status)), t.Title)
-			if t.Assignee != "" {
-				line += fmt.Sprintf("  [@%s]", t.Assignee)
-			}
-			fmt.Println(line)
-		}
+		fmt.Println(renderTicketTable(tickets))
 		return nil
 	},
 }

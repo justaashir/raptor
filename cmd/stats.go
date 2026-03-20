@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"raptor/client"
 
 	"github.com/spf13/cobra"
 )
@@ -13,7 +14,7 @@ var statsCmd = &cobra.Command{
 		if err := requireBoard(); err != nil {
 			return err
 		}
-		c := NewScopedClient(serverURL, authToken, activeWS, activeBoard)
+		c := client.NewScoped(serverURL, authToken, activeWS, activeBoard)
 		tickets, err := c.ListTickets("", false, true) // all=true to include closed
 		if err != nil {
 			return err
