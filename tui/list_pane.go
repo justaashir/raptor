@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"raptor/model"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -51,47 +52,54 @@ func (d ticketDelegate) Render(w io.Writer, m list.Model, index int, listItem li
 	t := ti.ticket
 
 	icon := StatusIcon(t.Status)
-	status := FormatStatus(t.Status)
+	status := padRight(FormatStatus(t.Status), 8)
+	id := padRight(t.ID, 10)
 	assignee := "·"
 	if t.Assignee != "" {
 		assignee = "@" + t.Assignee
 	}
-	age := FormatAge(t.CreatedAt)
+	assignee = padRight(assignee, 12)
+	age := padRight(FormatAge(t.CreatedAt), 6)
 
-	// icon(2) + STATUS(7) + ID(9) + ASSIGNEE(10) + AGE(5) + spaces = ~37
-	fixedW := 37
+	// Fixed: emoji(2) + space + status(8) + id(10) + assignee(12) + age(6) = 39
+	fixedW := 39
 	titleW := d.width - fixedW
 	if titleW < 4 {
 		titleW = 4
 	}
 	title := truncate(t.Title, titleW)
 
-	isSelected := index == m.Index()
-
-	if isSelected {
-		// Selected row — purple highlight like beads_viewer
-		cursor := lipgloss.NewStyle().Foreground(draculaPurple).Render("▸")
+	if index == m.Index() {
+		// Selected row — Dracula current line highlight
 		row := lipgloss.NewStyle().
 			Background(draculaLine).
 			Foreground(draculaFg).
 			Bold(true).
-			MaxWidth(d.width).
-			Render(fmt.Sprintf("%s %s %-7s %-9s %-10s %-5s %s",
-				cursor, icon, status, t.ID, assignee, age, title))
+			Width(d.width).
+			Render(fmt.Sprintf("%s %s%s%s%s%s",
+				icon, status, id, assignee, age, title))
 		fmt.Fprint(w, row)
 		return
 	}
 
-	// Normal row with colored columns
-	row := fmt.Sprintf("%s %s %s %s %s %s",
-		lipgloss.NewStyle().Foreground(StatusColor(t.Status)).Render(icon),
-		lipgloss.NewStyle().Foreground(StatusColor(t.Status)).Width(7).Render(status),
-		lipgloss.NewStyle().Foreground(draculaComment).Width(9).Render(t.ID),
-		lipgloss.NewStyle().Foreground(draculaPurple).Width(10).Render(assignee),
-		lipgloss.NewStyle().Foreground(draculaComment).Width(5).Render(age),
-		lipgloss.NewStyle().Foreground(draculaFg).MaxWidth(titleW).Render(title),
+	// Normal row — each column styled
+	statusColor := StatusColor(t.Status)
+	fmt.Fprintf(w, "%s %s%s%s%s%s",
+		icon,
+		lipgloss.NewStyle().Foreground(statusColor).Render(status),
+		lipgloss.NewStyle().Foreground(draculaCyan).Render(id),
+		lipgloss.NewStyle().Foreground(draculaPurple).Render(assignee),
+		lipgloss.NewStyle().Foreground(draculaComment).Render(age),
+		lipgloss.NewStyle().Foreground(draculaFg).Render(title),
 	)
-	fmt.Fprint(w, row)
+}
+
+// padRight pads s with spaces to width.
+func padRight(s string, width int) string {
+	if len(s) >= width {
+		return s[:width]
+	}
+	return s + strings.Repeat(" ", width-len(s))
 }
 
 // truncate cuts a string to maxLen, adding "..." if it was longer.

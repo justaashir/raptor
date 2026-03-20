@@ -37,19 +37,19 @@ func RenderStatusBar(tickets []model.Ticket, boardName string, focus focusPane, 
 		Padding(0, 1).
 		Render("ALL")
 
-	// Ticket counts with icons
+	// Ticket counts with emojis
 	left := fmt.Sprintf("%s  %s  %d tickets  %s %s %s %s",
 		filterBadge,
 		lipgloss.NewStyle().Foreground(draculaPink).Bold(true).Render(boardName),
 		len(tickets),
 		lipgloss.NewStyle().Foreground(StatusColor(model.Todo)).Render(
-			fmt.Sprintf("○%d", counts[model.Todo])),
+			fmt.Sprintf("📋%d", counts[model.Todo])),
 		lipgloss.NewStyle().Foreground(StatusColor(model.InProgress)).Render(
-			fmt.Sprintf("◉%d", counts[model.InProgress])),
+			fmt.Sprintf("🔧%d", counts[model.InProgress])),
 		lipgloss.NewStyle().Foreground(StatusColor(model.Done)).Render(
-			fmt.Sprintf("✓%d", counts[model.Done])),
+			fmt.Sprintf("✅%d", counts[model.Done])),
 		lipgloss.NewStyle().Foreground(StatusColor(model.Closed)).Render(
-			fmt.Sprintf("✗%d", counts[model.Closed])),
+			fmt.Sprintf("🔒%d", counts[model.Closed])),
 	)
 
 	// Right side: keybind hints with separators

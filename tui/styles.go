@@ -37,19 +37,19 @@ func StatusColor(s model.Status) lipgloss.Color {
 	}
 }
 
-// StatusIcon returns a colored icon for each status.
+// StatusIcon returns an emoji for each status.
 func StatusIcon(s model.Status) string {
 	switch s {
 	case model.Todo:
-		return "○"
+		return "📋"
 	case model.InProgress:
-		return "◉"
+		return "🔧"
 	case model.Done:
-		return "✓"
+		return "✅"
 	case model.Closed:
-		return "✗"
+		return "🔒"
 	default:
-		return "·"
+		return "📄"
 	}
 }
 

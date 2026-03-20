@@ -52,10 +52,10 @@ func TestStatusIcon_ReturnsCorrectIcons(t *testing.T) {
 		status model.Status
 		icon   string
 	}{
-		{model.Todo, "○"},
-		{model.InProgress, "◉"},
-		{model.Done, "✓"},
-		{model.Closed, "✗"},
+		{model.Todo, "📋"},
+		{model.InProgress, "🔧"},
+		{model.Done, "✅"},
+		{model.Closed, "🔒"},
 	}
 	for _, tt := range tests {
 		got := StatusIcon(tt.status)
