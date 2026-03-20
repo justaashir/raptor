@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"raptor/model"
@@ -57,14 +56,6 @@ func ValidateToken(token, secret string) (string, error) {
 	return username, nil
 }
 
-// UsernameFromContext extracts username from a standard context (used by TUI/WS code).
-func UsernameFromContext(ctx interface{ Value(any) any }) string {
-	if v, ok := ctx.Value("username").(string); ok {
-		return v
-	}
-	return ""
-}
-
 func (s *Server) authMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		if s.secret == "" {
@@ -86,13 +77,10 @@ func (s *Server) authMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 }
 
 func (s *Server) handleAuth(c echo.Context) error {
-	if c.Request().Method != http.MethodPost {
-		return c.String(http.StatusMethodNotAllowed, "method not allowed")
-	}
 	var input struct {
 		Username string `json:"username"`
 	}
-	if err := json.NewDecoder(c.Request().Body).Decode(&input); err != nil {
+	if err := c.Bind(&input); err != nil {
 		return c.String(http.StatusBadRequest, "bad request")
 	}
 	if input.Username == "" {

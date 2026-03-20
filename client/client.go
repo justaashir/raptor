@@ -11,7 +11,6 @@ import (
 
 type Client struct {
 	r         *resty.Client
-	baseURL   string
 	workspace string
 	board     string
 }
@@ -21,7 +20,7 @@ func New(baseURL, token string) *Client {
 	if token != "" {
 		r.SetAuthToken(token)
 	}
-	return &Client{r: r, baseURL: baseURL}
+	return &Client{r: r}
 }
 
 func NewScoped(baseURL, token, workspace, board string) *Client {

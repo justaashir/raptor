@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -46,11 +47,9 @@ func NewServer(db *DB, hub *Hub, opts ...Option) *Server {
 	}
 
 	// Public routes (no auth)
-	// Public routes — use Any for /api/auth so it catches all methods
-	// before the /api group's auth middleware can intercept.
-	s.Echo.Any("/api/auth", s.handleAuth)
-	s.Echo.Any("/api/version", s.handleVersion)
-	s.Echo.Any("/api/skill", s.handleSkill)
+	s.Echo.POST("/api/auth", s.handleAuth)
+	s.Echo.GET("/api/version", s.handleVersion)
+	s.Echo.GET("/api/skill", s.handleSkill)
 	s.Echo.GET("/install.sh", s.handleInstallScript)
 	s.Echo.GET("/ws", s.handleWS)
 
@@ -173,7 +172,7 @@ func (s *Server) handleWS(c echo.Context) error {
 func (s *Server) listWorkspaces(c echo.Context) error {
 	workspaces, err := s.db.ListWorkspacesForUser(username(c))
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, err.Error())
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
 	if workspaces == nil {
 		workspaces = []model.Workspace{}
@@ -186,7 +185,7 @@ func (s *Server) createWorkspace(c echo.Context) error {
 		Name string `json:"name"`
 	}
 	if err := c.Bind(&input); err != nil {
-		return c.JSON(http.StatusBadRequest, err.Error())
+		return jsonErr(c, http.StatusBadRequest, "bad request")
 	}
 	if input.Name == "" {
 		return jsonErr(c, http.StatusBadRequest, "name required")
@@ -194,7 +193,7 @@ func (s *Server) createWorkspace(c echo.Context) error {
 	id := genID()
 	u := username(c)
 	if err := s.db.CreateWorkspace(id, input.Name, u); err != nil {
-		return c.JSON(http.StatusInternalServerError, err.Error())
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
 	return c.JSON(http.StatusCreated, model.Workspace{ID: id, Name: input.Name, CreatedBy: u})
 }
@@ -205,7 +204,7 @@ func (s *Server) deleteWorkspace(c echo.Context) error {
 		return jsonErr(c, http.StatusForbidden, err.Error())
 	}
 	if err := s.db.DeleteWorkspace(wid); err != nil {
-		return c.JSON(http.StatusInternalServerError, err.Error())
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -219,7 +218,7 @@ func (s *Server) listWorkspaceMembers(c echo.Context) error {
 	}
 	members, err := s.db.ListWorkspaceMembers(wid)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, err.Error())
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
 	if members == nil {
 		members = []model.WorkspaceMember{}
@@ -237,7 +236,7 @@ func (s *Server) addWorkspaceMember(c echo.Context) error {
 		Role     string `json:"role"`
 	}
 	if err := c.Bind(&input); err != nil {
-		return c.JSON(http.StatusBadRequest, err.Error())
+		return jsonErr(c, http.StatusBadRequest, "bad request")
 	}
 	if input.Role == "" {
 		input.Role = "member"
@@ -264,13 +263,13 @@ func (s *Server) updateWorkspaceMember(c echo.Context) error {
 		Role string `json:"role"`
 	}
 	if err := c.Bind(&input); err != nil {
-		return c.JSON(http.StatusBadRequest, err.Error())
+		return jsonErr(c, http.StatusBadRequest, "bad request")
 	}
 	if !model.ValidRole(input.Role) {
 		return jsonErr(c, http.StatusBadRequest, "invalid role")
 	}
 	if err := s.db.UpdateMemberRole(wid, user, input.Role); err != nil {
-		return c.JSON(http.StatusInternalServerError, err.Error())
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
 	return c.JSON(http.StatusOK, map[string]string{"username": user, "role": input.Role})
 }
@@ -282,7 +281,7 @@ func (s *Server) removeWorkspaceMember(c echo.Context) error {
 		return jsonErr(c, http.StatusForbidden, err.Error())
 	}
 	if err := s.db.RemoveWorkspaceMember(wid, user); err != nil {
-		return c.JSON(http.StatusInternalServerError, err.Error())
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -296,7 +295,7 @@ func (s *Server) listBoards(c echo.Context) error {
 	}
 	boards, err := s.db.ListBoardsForUser(wid, username(c))
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, err.Error())
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
 	if boards == nil {
 		boards = []model.Board{}
@@ -313,7 +312,7 @@ func (s *Server) createBoard(c echo.Context) error {
 		Name string `json:"name"`
 	}
 	if err := c.Bind(&input); err != nil {
-		return c.JSON(http.StatusBadRequest, err.Error())
+		return jsonErr(c, http.StatusBadRequest, "bad request")
 	}
 	if input.Name == "" {
 		return jsonErr(c, http.StatusBadRequest, "name required")
@@ -321,7 +320,7 @@ func (s *Server) createBoard(c echo.Context) error {
 	id := genID()
 	u := username(c)
 	if err := s.db.CreateBoard(id, wid, input.Name, u); err != nil {
-		return c.JSON(http.StatusInternalServerError, err.Error())
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
 	return c.JSON(http.StatusCreated, model.Board{ID: id, WorkspaceID: wid, Name: input.Name, CreatedBy: u})
 }
@@ -333,7 +332,7 @@ func (s *Server) deleteBoard(c echo.Context) error {
 		return jsonErr(c, http.StatusForbidden, err.Error())
 	}
 	if err := s.db.DeleteBoard(bid); err != nil {
-		return c.JSON(http.StatusInternalServerError, err.Error())
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -348,7 +347,7 @@ func (s *Server) listBoardMembers(c echo.Context) error {
 	}
 	members, err := s.db.ListBoardMembers(bid)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, err.Error())
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
 	if members == nil {
 		members = []model.BoardMember{}
@@ -366,10 +365,10 @@ func (s *Server) addBoardMember(c echo.Context) error {
 		Username string `json:"username"`
 	}
 	if err := c.Bind(&input); err != nil {
-		return c.JSON(http.StatusBadRequest, err.Error())
+		return jsonErr(c, http.StatusBadRequest, "bad request")
 	}
 	if err := s.db.AddBoardMember(bid, input.Username); err != nil {
-		return c.JSON(http.StatusInternalServerError, err.Error())
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
 	return c.JSON(http.StatusCreated, map[string]string{"username": input.Username, "board_id": bid})
 }
@@ -382,7 +381,7 @@ func (s *Server) removeBoardMember(c echo.Context) error {
 		return jsonErr(c, http.StatusForbidden, err.Error())
 	}
 	if err := s.db.RemoveBoardMember(bid, user); err != nil {
-		return c.JSON(http.StatusInternalServerError, err.Error())
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
 	return c.NoContent(http.StatusNoContent)
 }
@@ -401,7 +400,7 @@ func (s *Server) listTickets(c echo.Context) error {
 	if c.QueryParam("stats") == "true" {
 		counts, err := s.db.TicketStats(bid)
 		if err != nil {
-			return c.JSON(http.StatusInternalServerError, "internal server error")
+			return jsonErr(c, http.StatusInternalServerError, "internal server error")
 		}
 		total := 0
 		for _, cnt := range counts {
@@ -426,7 +425,7 @@ func (s *Server) listTickets(c echo.Context) error {
 	}
 	if err != nil {
 		log.Printf("ticket list error: %v", err)
-		return c.JSON(http.StatusInternalServerError, "internal server error")
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
 	if mine == "true" && u != "" {
 		var filtered []model.Ticket
@@ -457,7 +456,7 @@ func (s *Server) createTicket(c echo.Context) error {
 		Assign  string `json:"assignee"`
 	}
 	if err := c.Bind(&input); err != nil {
-		return c.JSON(http.StatusBadRequest, err.Error())
+		return jsonErr(c, http.StatusBadRequest, "bad request")
 	}
 	if input.Assign != "" {
 		isMember, _ := s.db.IsBoardMember(bid, input.Assign)
@@ -472,7 +471,7 @@ func (s *Server) createTicket(c echo.Context) error {
 		ticket.AssignedBy = u
 	}
 	if err := s.db.CreateTicket(ticket); err != nil {
-		return c.JSON(http.StatusInternalServerError, err.Error())
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
 	s.hub.Broadcast([]byte(`{"event":"ticket_changed"}`))
 	return c.JSON(http.StatusCreated, ticket)
@@ -490,7 +489,7 @@ func (s *Server) getTicket(c echo.Context) error {
 		return c.String(http.StatusNotFound, "not found")
 	}
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, err.Error())
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
 	return c.JSON(http.StatusOK, ticket)
 }
@@ -504,7 +503,7 @@ func (s *Server) updateTicket(c echo.Context) error {
 	}
 
 	var fields map[string]any
-	if err := c.Bind(&fields); err != nil {
+	if err := json.NewDecoder(c.Request().Body).Decode(&fields); err != nil {
 		return c.String(http.StatusBadRequest, "invalid request body")
 	}
 	// Whitelist allowed fields
@@ -539,7 +538,7 @@ func (s *Server) updateTicket(c echo.Context) error {
 	}
 	if err := s.db.UpdateTicket(tid, fields); err != nil {
 		log.Printf("ticket update error: %v", err)
-		return c.String(http.StatusInternalServerError, "internal server error")
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
 	s.hub.Broadcast([]byte(`{"event":"ticket_changed"}`))
 	ticket, _ := s.db.GetTicket(tid)
@@ -554,7 +553,7 @@ func (s *Server) deleteTicket(c echo.Context) error {
 		return jsonErr(c, http.StatusForbidden, err.Error())
 	}
 	if err := s.db.DeleteTicket(tid); err != nil {
-		return c.JSON(http.StatusInternalServerError, err.Error())
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
 	s.hub.Broadcast([]byte(`{"event":"ticket_changed"}`))
 	return c.NoContent(http.StatusNoContent)
