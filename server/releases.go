@@ -2,37 +2,34 @@ package server
 
 import (
 	"embed"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"regexp"
+
+	"github.com/labstack/echo/v4"
 )
 
 //go:embed skill/SKILL.md
 var skillFS embed.FS
 
-// Set via the server package or main. Defaults to "dev".
 var CurrentVersion = "dev"
 
 const githubRepo = "justaashir/raptor"
 
-func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"version": CurrentVersion})
+func (s *Server) handleVersion(c echo.Context) error {
+	return c.JSON(http.StatusOK, map[string]string{"version": CurrentVersion})
 }
 
-func (s *Server) handleSkill(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSkill(c echo.Context) error {
 	data, err := skillFS.ReadFile("skill/SKILL.md")
 	if err != nil {
-		http.Error(w, "skill not found", http.StatusInternalServerError)
-		return
+		return c.String(http.StatusInternalServerError, "skill not found")
 	}
-	w.Header().Set("Content-Type", "text/plain")
-	w.Write(data)
+	return c.Blob(http.StatusOK, "text/plain", data)
 }
 
-func (s *Server) handleInstallScript(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleInstallScript(c echo.Context) error {
 	ghURL := fmt.Sprintf("https://github.com/%s/releases/latest/download", githubRepo)
 
 	script := fmt.Sprintf(`#!/bin/sh
@@ -64,17 +61,13 @@ echo ""
 if ! echo "$PATH" | grep -q "$INSTALL_DIR"; then
     echo "Add to your PATH:  export PATH=\"\$HOME/.local/bin:\$PATH\""
 fi
-`, ghURL, serverBaseURL(r))
+`, ghURL, serverBaseURL(c.Request()))
 
-	w.Header().Set("Content-Type", "text/plain")
-	w.Write([]byte(script))
+	return c.Blob(http.StatusOK, "text/plain", []byte(script))
 }
 
-// validHost matches safe hostname:port values only.
 var validHost = regexp.MustCompile(`^[a-zA-Z0-9._:-]+$`)
 
-// serverBaseURL derives the server's public URL from the request.
-// Prefers SERVER_BASE_URL env var if set. Validates headers to prevent injection.
 func serverBaseURL(r *http.Request) string {
 	if base := os.Getenv("SERVER_BASE_URL"); base != "" {
 		return base

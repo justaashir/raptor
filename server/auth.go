@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
@@ -12,13 +11,11 @@ import (
 	"raptor/model"
 	"strings"
 	"time"
+
+	"github.com/labstack/echo/v4"
 )
 
 const tokenTTL = 30 * 24 * time.Hour
-
-type contextKey string
-
-const usernameKey contextKey = "username"
 
 func GenerateToken(username, secret string) string {
 	expiry := time.Now().Add(tokenTTL).Unix()
@@ -43,7 +40,6 @@ func ValidateToken(token, secret string) (string, error) {
 	expiryStr := parts[1]
 	sig := parts[2]
 
-	// Verify HMAC
 	payload := fmt.Sprintf("%s:%s", username, expiryStr)
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(payload))
@@ -52,7 +48,6 @@ func ValidateToken(token, secret string) (string, error) {
 		return "", fmt.Errorf("invalid token signature")
 	}
 
-	// Check expiry
 	var expiry int64
 	fmt.Sscanf(expiryStr, "%d", &expiry)
 	if time.Now().Unix() > expiry {
@@ -62,80 +57,57 @@ func ValidateToken(token, secret string) (string, error) {
 	return username, nil
 }
 
-func UsernameFromContext(ctx context.Context) string {
-	if v, ok := ctx.Value(usernameKey).(string); ok {
+// UsernameFromContext extracts username from a standard context (used by TUI/WS code).
+func UsernameFromContext(ctx interface{ Value(any) any }) string {
+	if v, ok := ctx.Value("username").(string); ok {
 		return v
 	}
 	return ""
 }
 
-func isPublicRoute(path string) bool {
-	switch {
-	case path == "/api/version":
-		return true
-	case path == "/api/auth":
-		return true
-	case path == "/install.sh":
-		return true
-	case path == "/ws":
-		return true
-	}
-	return false
-}
-
-func (s *Server) authMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if isPublicRoute(r.URL.Path) || s.secret == "" {
-			next.ServeHTTP(w, r)
-			return
+func (s *Server) authMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		if s.secret == "" {
+			return next(c)
 		}
 
-		auth := r.Header.Get("Authorization")
+		auth := c.Request().Header.Get("Authorization")
 		if !strings.HasPrefix(auth, "Bearer ") {
-			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-			return
+			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		}
 		token := strings.TrimPrefix(auth, "Bearer ")
-		username, err := ValidateToken(token, s.secret)
+		user, err := ValidateToken(token, s.secret)
 		if err != nil {
-			http.Error(w, fmt.Sprintf(`{"error":"%s"}`, err.Error()), http.StatusUnauthorized)
-			return
+			return c.JSON(http.StatusUnauthorized, map[string]string{"error": err.Error()})
 		}
-		ctx := context.WithValue(r.Context(), usernameKey, username)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
+		c.Set("username", user)
+		return next(c)
+	}
 }
 
-func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
+func (s *Server) handleAuth(c echo.Context) error {
+	if c.Request().Method != http.MethodPost {
+		return c.String(http.StatusMethodNotAllowed, "method not allowed")
 	}
-
 	var input struct {
 		Username string `json:"username"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
+	if err := json.NewDecoder(c.Request().Body).Decode(&input); err != nil {
+		return c.String(http.StatusBadRequest, "bad request")
 	}
 	if input.Username == "" {
-		http.Error(w, `{"error":"username required"}`, http.StatusBadRequest)
-		return
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "username required"})
 	}
 
-	// Check workspace membership — user must belong to at least one workspace
 	isMember, _ := s.db.IsWorkspaceMember(input.Username)
 	if !isMember {
 		allowed := false
-		// Check seed allowlist
 		for _, u := range s.allowedUsers {
 			if strings.EqualFold(u, input.Username) {
 				allowed = true
 				break
 			}
 		}
-		// If no allowlist and no workspace members exist yet (fresh install), allow anyone
 		if !allowed && len(s.allowedUsers) == 0 {
 			var count int64
 			s.db.conn.Model(&model.WorkspaceMember{}).Count(&count)
@@ -144,14 +116,12 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if !allowed {
-			http.Error(w, `{"error":"user not allowed"}`, http.StatusForbidden)
-			return
+			return c.JSON(http.StatusForbidden, map[string]string{"error": "user not allowed"})
 		}
 	}
 
 	token := GenerateToken(input.Username, s.secret)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	return c.JSON(http.StatusOK, map[string]string{
 		"token":    token,
 		"username": input.Username,
 	})
