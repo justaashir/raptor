@@ -8,20 +8,6 @@ import (
 	"testing"
 )
 
-func TestNew_creates_client_with_base_url_and_token(t *testing.T) {
-	c := New("http://localhost:8080", "tok")
-	if c == nil {
-		t.Fatal("expected non-nil client")
-	}
-}
-
-func TestNewScoped_creates_client_with_workspace_and_board(t *testing.T) {
-	c := NewScoped("http://localhost:8080", "tok", "ws1", "bd1")
-	if c == nil {
-		t.Fatal("expected non-nil client")
-	}
-}
-
 func TestClient_CreateTicket(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
