@@ -76,3 +76,41 @@ func TestDB_ListTickets_FilterByStatus(t *testing.T) {
 		t.Fatalf("expected %q, got %q", "Todo task", tickets[0].Title)
 	}
 }
+
+func TestDB_UpdateTicket(t *testing.T) {
+	db := newTestDB(t)
+	ticket := model.NewTicket("Original", "")
+	db.CreateTicket(ticket)
+
+	err := db.UpdateTicket(ticket.ID, map[string]any{
+		"title":  "Updated",
+		"status": "in_progress",
+	})
+	if err != nil {
+		t.Fatalf("failed to update: %v", err)
+	}
+
+	got, _ := db.GetTicket(ticket.ID)
+	if got.Title != "Updated" {
+		t.Fatalf("expected title %q, got %q", "Updated", got.Title)
+	}
+	if got.Status != model.InProgress {
+		t.Fatalf("expected status %q, got %q", model.InProgress, got.Status)
+	}
+}
+
+func TestDB_DeleteTicket(t *testing.T) {
+	db := newTestDB(t)
+	ticket := model.NewTicket("To delete", "")
+	db.CreateTicket(ticket)
+
+	err := db.DeleteTicket(ticket.ID)
+	if err != nil {
+		t.Fatalf("failed to delete: %v", err)
+	}
+
+	_, err = db.GetTicket(ticket.ID)
+	if err == nil {
+		t.Fatal("expected error getting deleted ticket")
+	}
+}

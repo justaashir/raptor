@@ -2,7 +2,10 @@ package server
 
 import (
 	"database/sql"
+	"fmt"
 	"raptor/model"
+	"strings"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -65,6 +68,31 @@ func (db *DB) ListTickets(status string) ([]model.Ticket, error) {
 		tickets = append(tickets, t)
 	}
 	return tickets, rows.Err()
+}
+
+func (db *DB) UpdateTicket(id string, fields map[string]any) error {
+	if len(fields) == 0 {
+		return fmt.Errorf("no fields to update")
+	}
+	var setClauses []string
+	var args []any
+	for k, v := range fields {
+		setClauses = append(setClauses, k+" = ?")
+		args = append(args, v)
+	}
+	setClauses = append(setClauses, "updated_at = ?")
+	args = append(args, time.Now())
+	args = append(args, id)
+	_, err := db.conn.Exec(
+		fmt.Sprintf("UPDATE tickets SET %s WHERE id = ?", strings.Join(setClauses, ", ")),
+		args...,
+	)
+	return err
+}
+
+func (db *DB) DeleteTicket(id string) error {
+	_, err := db.conn.Exec(`DELETE FROM tickets WHERE id = ?`, id)
+	return err
 }
 
 func (db *DB) GetTicket(id string) (model.Ticket, error) {
