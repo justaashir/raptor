@@ -287,18 +287,26 @@ func (db *DB) RemoveBoardMember(boardID, username string) error {
 
 func (db *DB) CreateTicket(t model.Ticket) error {
 	_, err := db.conn.Exec(
-		`INSERT INTO tickets (id, title, content, status, created_by, assignee, assigned_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		t.ID, t.Title, t.Content, t.Status, t.CreatedBy, t.Assignee, t.AssignedBy, t.CreatedAt, t.UpdatedAt,
+		`INSERT INTO tickets (id, title, content, status, board_id, created_by, assignee, assigned_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		t.ID, t.Title, t.Content, t.Status, t.BoardID, t.CreatedBy, t.Assignee, t.AssignedBy, t.CreatedAt, t.UpdatedAt,
 	)
 	return err
 }
 
-func (db *DB) ListTickets(status string) ([]model.Ticket, error) {
-	query := `SELECT id, title, content, status, created_by, assignee, assigned_by, created_at, updated_at FROM tickets`
+func (db *DB) ListTickets(boardID, status string) ([]model.Ticket, error) {
+	query := `SELECT id, title, content, status, board_id, created_by, assignee, assigned_by, created_at, updated_at FROM tickets`
+	var conditions []string
 	var args []any
+	if boardID != "" {
+		conditions = append(conditions, "board_id = ?")
+		args = append(args, boardID)
+	}
 	if status != "" {
-		query += ` WHERE status = ?`
+		conditions = append(conditions, "status = ?")
 		args = append(args, status)
+	}
+	if len(conditions) > 0 {
+		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
 	query += ` ORDER BY created_at DESC`
 	rows, err := db.conn.Query(query, args...)
@@ -309,7 +317,7 @@ func (db *DB) ListTickets(status string) ([]model.Ticket, error) {
 	var tickets []model.Ticket
 	for rows.Next() {
 		var t model.Ticket
-		if err := rows.Scan(&t.ID, &t.Title, &t.Content, &t.Status, &t.CreatedBy, &t.Assignee, &t.AssignedBy, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.Title, &t.Content, &t.Status, &t.BoardID, &t.CreatedBy, &t.Assignee, &t.AssignedBy, &t.CreatedAt, &t.UpdatedAt); err != nil {
 			return nil, err
 		}
 		tickets = append(tickets, t)
@@ -345,7 +353,7 @@ func (db *DB) DeleteTicket(id string) error {
 func (db *DB) GetTicket(id string) (model.Ticket, error) {
 	var t model.Ticket
 	err := db.conn.QueryRow(
-		`SELECT id, title, content, status, created_by, assignee, assigned_by, created_at, updated_at FROM tickets WHERE id = ?`, id,
-	).Scan(&t.ID, &t.Title, &t.Content, &t.Status, &t.CreatedBy, &t.Assignee, &t.AssignedBy, &t.CreatedAt, &t.UpdatedAt)
+		`SELECT id, title, content, status, board_id, created_by, assignee, assigned_by, created_at, updated_at FROM tickets WHERE id = ?`, id,
+	).Scan(&t.ID, &t.Title, &t.Content, &t.Status, &t.BoardID, &t.CreatedBy, &t.Assignee, &t.AssignedBy, &t.CreatedAt, &t.UpdatedAt)
 	return t, err
 }

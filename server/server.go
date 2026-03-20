@@ -98,7 +98,7 @@ func (s *Server) handleTickets(w http.ResponseWriter, r *http.Request) {
 		status := r.URL.Query().Get("status")
 		mine := r.URL.Query().Get("mine")
 		username := UsernameFromContext(r.Context())
-		tickets, err := s.db.ListTickets(status)
+		tickets, err := s.db.ListTickets("", status)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -128,10 +128,15 @@ func (s *Server) handleTickets(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		if input.Assign != "" && !s.isAllowedUser(input.Assign) {
+			http.Error(w, `{"error":"assignee is not a valid user"}`, http.StatusBadRequest)
+			return
+		}
 		username := UsernameFromContext(r.Context())
 		ticket := model.NewTicket(input.Title, input.Content, username)
 		if input.Assign != "" {
 			ticket.Assignee = input.Assign
+			ticket.AssignedBy = username
 		}
 		if err := s.db.CreateTicket(ticket); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -173,6 +178,13 @@ func (s *Server) handleTicket(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewDecoder(r.Body).Decode(&fields); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
+		}
+		if assignee, ok := fields["assignee"].(string); ok && assignee != "" {
+			if !s.isAllowedUser(assignee) {
+				http.Error(w, `{"error":"assignee is not a valid user"}`, http.StatusBadRequest)
+				return
+			}
+			fields["assigned_by"] = UsernameFromContext(r.Context())
 		}
 		if err := s.db.UpdateTicket(id, fields); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)

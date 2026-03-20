@@ -51,7 +51,7 @@ func newTestDB(t *testing.T) *DB {
 
 func TestDB_ListTickets_Empty(t *testing.T) {
 	db := newTestDB(t)
-	tickets, err := db.ListTickets("")
+	tickets, err := db.ListTickets("", "")
 	if err != nil {
 		t.Fatalf("failed to list: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestDB_ListTickets_FilterByStatus(t *testing.T) {
 	db.CreateTicket(t1)
 	db.CreateTicket(t2)
 
-	tickets, err := db.ListTickets("todo")
+	tickets, err := db.ListTickets("", "todo")
 	if err != nil {
 		t.Fatalf("failed to list: %v", err)
 	}
@@ -303,6 +303,45 @@ func TestDB_BoardMembers(t *testing.T) {
 	isMember, _ = db.IsBoardMember("bd1", "bob")
 	if isMember {
 		t.Fatal("expected bob to no longer be a board member")
+	}
+}
+
+func TestDB_TicketsScoped_ToBoard(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateWorkspace("ws1", "Team", "alice")
+	db.CreateBoard("bd1", "ws1", "Board 1", "alice")
+	db.CreateBoard("bd2", "ws1", "Board 2", "alice")
+
+	t1 := model.NewTicket("Task A", "", "alice")
+	t1.BoardID = "bd1"
+	db.CreateTicket(t1)
+
+	t2 := model.NewTicket("Task B", "", "alice")
+	t2.BoardID = "bd2"
+	db.CreateTicket(t2)
+
+	// List for board 1
+	tickets, err := db.ListTickets("bd1", "")
+	if err != nil {
+		t.Fatalf("failed to list tickets: %v", err)
+	}
+	if len(tickets) != 1 {
+		t.Fatalf("expected 1 ticket on bd1, got %d", len(tickets))
+	}
+	if tickets[0].Title != "Task A" {
+		t.Fatalf("expected Task A, got %q", tickets[0].Title)
+	}
+
+	// List for board 2
+	tickets, _ = db.ListTickets("bd2", "")
+	if len(tickets) != 1 {
+		t.Fatalf("expected 1 ticket on bd2, got %d", len(tickets))
+	}
+
+	// Empty boardID returns all (backward compat)
+	tickets, _ = db.ListTickets("", "")
+	if len(tickets) != 2 {
+		t.Fatalf("expected 2 tickets total, got %d", len(tickets))
 	}
 }
 
