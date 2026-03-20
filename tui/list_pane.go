@@ -53,7 +53,7 @@ func (d ticketDelegate) Render(w io.Writer, m list.Model, index int, listItem li
 
 	status := padRight(FormatStatus(t.Status), 8)
 	id := padRight(t.ID, 10)
-	assignee := "·"
+	assignee := "unassigned"
 	if t.Assignee != "" {
 		assignee = "@" + t.Assignee
 	}
