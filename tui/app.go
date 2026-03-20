@@ -69,7 +69,7 @@ func (a *App) initPanes() {
 }
 
 func (a *App) paneSizes() (listW, detailW, contentH int) {
-	contentH = a.height - 2
+	contentH = a.height - 3 // header + status bar + border
 	if contentH < 5 {
 		contentH = 5
 	}
@@ -227,6 +227,13 @@ func (a *App) View() string {
 		return a.viewBoardSelector()
 	}
 
+	// Header
+	var header string
+	if a.wsName != "" || a.boardName != "" {
+		headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("62")).Padding(0, 1)
+		header = headerStyle.Render(fmt.Sprintf("%s > %s", a.wsName, a.boardName)) + "\n"
+	}
+
 	listStyle := UnfocusedBorderStyle
 	detailStyle := UnfocusedBorderStyle
 	if a.focused == focusList {
@@ -255,7 +262,7 @@ func (a *App) View() string {
 		statusBar = errStyle.Render(fmt.Sprintf("Error: %v", a.err))
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, panes, statusBar)
+	return lipgloss.JoinVertical(lipgloss.Left, header, panes, statusBar)
 }
 
 func (a *App) viewBoardSelector() string {
