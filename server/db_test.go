@@ -136,6 +136,83 @@ func TestDB_CreateWorkspace(t *testing.T) {
 	}
 }
 
+func TestDB_WorkspaceMembers(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateWorkspace("ws1", "Team", "alice")
+
+	// alice is already owner from CreateWorkspace
+	role, err := db.GetMemberRole("ws1", "alice")
+	if err != nil {
+		t.Fatalf("failed to get role: %v", err)
+	}
+	if role != "owner" {
+		t.Fatalf("expected owner, got %q", role)
+	}
+
+	// Add bob as member
+	err = db.AddWorkspaceMember("ws1", "bob", "member")
+	if err != nil {
+		t.Fatalf("failed to add member: %v", err)
+	}
+
+	members, err := db.ListWorkspaceMembers("ws1")
+	if err != nil {
+		t.Fatalf("failed to list members: %v", err)
+	}
+	if len(members) != 2 {
+		t.Fatalf("expected 2 members, got %d", len(members))
+	}
+
+	// bob can see the workspace
+	workspaces, _ := db.ListWorkspacesForUser("bob")
+	if len(workspaces) != 1 {
+		t.Fatalf("expected bob to see 1 workspace, got %d", len(workspaces))
+	}
+}
+
+func TestDB_UpdateMemberRole(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateWorkspace("ws1", "Team", "alice")
+	db.AddWorkspaceMember("ws1", "bob", "member")
+
+	err := db.UpdateMemberRole("ws1", "bob", "admin")
+	if err != nil {
+		t.Fatalf("failed to update role: %v", err)
+	}
+	role, _ := db.GetMemberRole("ws1", "bob")
+	if role != "admin" {
+		t.Fatalf("expected admin, got %q", role)
+	}
+}
+
+func TestDB_RemoveWorkspaceMember(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateWorkspace("ws1", "Team", "alice")
+	db.AddWorkspaceMember("ws1", "bob", "member")
+
+	err := db.RemoveWorkspaceMember("ws1", "bob")
+	if err != nil {
+		t.Fatalf("failed to remove member: %v", err)
+	}
+	members, _ := db.ListWorkspaceMembers("ws1")
+	if len(members) != 1 {
+		t.Fatalf("expected 1 member after remove, got %d", len(members))
+	}
+}
+
+func TestDB_DeleteWorkspace(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateWorkspace("ws1", "Team", "alice")
+	err := db.DeleteWorkspace("ws1")
+	if err != nil {
+		t.Fatalf("failed to delete workspace: %v", err)
+	}
+	workspaces, _ := db.ListWorkspacesForUser("alice")
+	if len(workspaces) != 0 {
+		t.Fatalf("expected 0 workspaces after delete, got %d", len(workspaces))
+	}
+}
+
 func TestDB_AssigneeField(t *testing.T) {
 	db := newTestDB(t)
 	ticket := model.NewTicket("Assigned task", "", "alice")

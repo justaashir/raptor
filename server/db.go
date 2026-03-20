@@ -69,6 +69,64 @@ func (db *DB) CreateWorkspace(id, name, createdBy string) error {
 	return err
 }
 
+func (db *DB) AddWorkspaceMember(workspaceID, username, role string) error {
+	_, err := db.conn.Exec(
+		`INSERT INTO workspace_members (workspace_id, username, role) VALUES (?, ?, ?)`,
+		workspaceID, username, role,
+	)
+	return err
+}
+
+func (db *DB) ListWorkspaceMembers(workspaceID string) ([]model.WorkspaceMember, error) {
+	rows, err := db.conn.Query(
+		`SELECT workspace_id, username, role, created_at FROM workspace_members WHERE workspace_id = ? ORDER BY created_at`,
+		workspaceID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var members []model.WorkspaceMember
+	for rows.Next() {
+		var m model.WorkspaceMember
+		if err := rows.Scan(&m.WorkspaceID, &m.Username, &m.Role, &m.CreatedAt); err != nil {
+			return nil, err
+		}
+		members = append(members, m)
+	}
+	return members, rows.Err()
+}
+
+func (db *DB) GetMemberRole(workspaceID, username string) (string, error) {
+	var role string
+	err := db.conn.QueryRow(
+		`SELECT role FROM workspace_members WHERE workspace_id = ? AND username = ?`,
+		workspaceID, username,
+	).Scan(&role)
+	return role, err
+}
+
+func (db *DB) UpdateMemberRole(workspaceID, username, role string) error {
+	_, err := db.conn.Exec(
+		`UPDATE workspace_members SET role = ? WHERE workspace_id = ? AND username = ?`,
+		role, workspaceID, username,
+	)
+	return err
+}
+
+func (db *DB) RemoveWorkspaceMember(workspaceID, username string) error {
+	_, err := db.conn.Exec(
+		`DELETE FROM workspace_members WHERE workspace_id = ? AND username = ?`,
+		workspaceID, username,
+	)
+	return err
+}
+
+func (db *DB) DeleteWorkspace(id string) error {
+	_, err := db.conn.Exec(`DELETE FROM workspaces WHERE id = ?`, id)
+	return err
+}
+
 func (db *DB) ListWorkspacesForUser(username string) ([]model.Workspace, error) {
 	rows, err := db.conn.Query(
 		`SELECT w.id, w.name, w.created_by, w.created_at FROM workspaces w
