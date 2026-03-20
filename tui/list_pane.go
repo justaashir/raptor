@@ -50,39 +50,46 @@ func (d ticketDelegate) Render(w io.Writer, m list.Model, index int, listItem li
 	}
 	t := ti.ticket
 
+	icon := StatusIcon(t.Status)
 	status := FormatStatus(t.Status)
-	assignee := "--"
+	assignee := "·"
 	if t.Assignee != "" {
 		assignee = "@" + t.Assignee
 	}
 	age := FormatAge(t.CreatedAt)
 
-	// Fixed columns: STATUS(7) + ID(9) + ASSIGNEE(9) + AGE(5) + spaces(4) = 34
-	fixedW := 34
+	// icon(2) + STATUS(7) + ID(9) + ASSIGNEE(10) + AGE(5) + spaces = ~37
+	fixedW := 37
 	titleW := d.width - fixedW
 	if titleW < 4 {
 		titleW = 4
 	}
 	title := truncate(t.Title, titleW)
 
-	if index == m.Index() {
+	isSelected := index == m.Index()
+
+	if isSelected {
+		// Selected row — purple highlight like beads_viewer
+		cursor := lipgloss.NewStyle().Foreground(draculaPurple).Render("▸")
 		row := lipgloss.NewStyle().
-			Background(lipgloss.Color("62")).
-			Foreground(lipgloss.Color("229")).
+			Background(draculaLine).
+			Foreground(draculaFg).
 			Bold(true).
 			MaxWidth(d.width).
-			Render(fmt.Sprintf("%-7s %-9s %-9s %-5s %s",
-				status, t.ID, assignee, age, title))
+			Render(fmt.Sprintf("%s %s %-7s %-9s %-10s %-5s %s",
+				cursor, icon, status, t.ID, assignee, age, title))
 		fmt.Fprint(w, row)
 		return
 	}
 
-	row := fmt.Sprintf("%s %s %s %s %s",
+	// Normal row with colored columns
+	row := fmt.Sprintf("%s %s %s %s %s %s",
+		lipgloss.NewStyle().Foreground(StatusColor(t.Status)).Render(icon),
 		lipgloss.NewStyle().Foreground(StatusColor(t.Status)).Width(7).Render(status),
-		lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Width(9).Render(t.ID),
-		lipgloss.NewStyle().Foreground(lipgloss.Color("176")).Width(9).Render(assignee),
-		lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Width(5).Render(age),
-		lipgloss.NewStyle().Foreground(lipgloss.Color("252")).MaxWidth(titleW).Render(title),
+		lipgloss.NewStyle().Foreground(draculaComment).Width(9).Render(t.ID),
+		lipgloss.NewStyle().Foreground(draculaPurple).Width(10).Render(assignee),
+		lipgloss.NewStyle().Foreground(draculaComment).Width(5).Render(age),
+		lipgloss.NewStyle().Foreground(draculaFg).MaxWidth(titleW).Render(title),
 	)
 	fmt.Fprint(w, row)
 }

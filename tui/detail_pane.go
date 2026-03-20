@@ -41,7 +41,7 @@ func newGlamourRenderer(width int) *glamour.TermRenderer {
 		contentWidth = 20
 	}
 	r, err := glamour.NewTermRenderer(
-		glamour.WithStandardStyle(styles.DarkStyle),
+		glamour.WithStandardStyle(styles.DraculaStyle),
 		glamour.WithWordWrap(contentWidth),
 		glamour.WithEmoji(),
 	)
@@ -58,38 +58,47 @@ func RenderDetailContent(t *model.Ticket, width int, renderer ...*glamour.TermRe
 		return "No ticket selected"
 	}
 
-	title := DetailTitleStyle.Render(t.Title)
+	// Title with icon
+	icon := lipgloss.NewStyle().Foreground(StatusColor(t.Status)).Render(StatusIcon(t.Status))
+	title := fmt.Sprintf("%s %s", icon, DetailTitleStyle.Render(t.Title))
+
+	// Status badge
+	statusBadge := lipgloss.NewStyle().
+		Background(StatusColor(t.Status)).
+		Foreground(lipgloss.Color("#282a36")).
+		Bold(true).
+		Padding(0, 1).
+		Render(FormatStatus(t.Status))
 
 	metaLines := fmt.Sprintf(
-		"%s %s  %s %s  %s %s",
-		DetailMetaKeyStyle.Render("Status"),
-		lipgloss.NewStyle().Foreground(StatusColor(t.Status)).Render(FormatStatus(t.Status)),
+		"%s  %s %s  %s %s",
+		statusBadge,
 		DetailMetaKeyStyle.Render("ID"),
-		DetailMetaValueStyle.Render(t.ID),
+		lipgloss.NewStyle().Foreground(draculaCyan).Render(t.ID),
 		DetailMetaKeyStyle.Render("Age"),
-		DetailMetaValueStyle.Render(FormatAge(t.CreatedAt)),
+		lipgloss.NewStyle().Foreground(draculaYellow).Render(FormatAge(t.CreatedAt)),
 	)
 
 	if t.Assignee != "" {
 		metaLines += fmt.Sprintf("  %s %s",
 			DetailMetaKeyStyle.Render("Assignee"),
-			lipgloss.NewStyle().Foreground(lipgloss.Color("176")).Render("@"+t.Assignee),
+			lipgloss.NewStyle().Foreground(draculaPurple).Render("@"+t.Assignee),
 		)
 	}
 
 	if t.CreatedBy != "" {
 		metaLines += fmt.Sprintf("  %s %s",
 			DetailMetaKeyStyle.Render("By"),
-			DetailMetaValueStyle.Render(t.CreatedBy),
+			lipgloss.NewStyle().Foreground(draculaOrange).Render(t.CreatedBy),
 		)
 	}
 
 	dates := fmt.Sprintf(
 		"%s %s  %s %s",
 		DetailMetaKeyStyle.Render("Created"),
-		DetailMetaValueStyle.Render(t.CreatedAt.Format("2006-01-02 15:04")),
+		lipgloss.NewStyle().Foreground(draculaComment).Render(t.CreatedAt.Format("2006-01-02 15:04")),
 		DetailMetaKeyStyle.Render("Updated"),
-		DetailMetaValueStyle.Render(t.UpdatedAt.Format("2006-01-02 15:04")),
+		lipgloss.NewStyle().Foreground(draculaComment).Render(t.UpdatedAt.Format("2006-01-02 15:04")),
 	)
 
 	var body string

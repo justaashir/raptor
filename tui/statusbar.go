@@ -25,47 +25,51 @@ func CountByStatus(tickets []model.Ticket) map[model.Status]int {
 	return counts
 }
 
-// RenderStatusBar renders the bottom status bar.
+// RenderStatusBar renders the bottom status bar with Dracula colors.
 func RenderStatusBar(tickets []model.Ticket, boardName string, focus focusPane, width int) string {
 	counts := CountByStatus(tickets)
 
-	// Left side: board info + counts
-	todoStyle := lipgloss.NewStyle().Foreground(StatusColor(model.Todo))
-	progStyle := lipgloss.NewStyle().Foreground(StatusColor(model.InProgress))
-	doneStyle := lipgloss.NewStyle().Foreground(StatusColor(model.Done))
-	closedStyle := lipgloss.NewStyle().Foreground(StatusColor(model.Closed))
-
+	// Filter badge
 	filterBadge := lipgloss.NewStyle().
-		Background(lipgloss.Color("62")).
-		Foreground(lipgloss.Color("229")).
+		Background(draculaPurple).
+		Foreground(lipgloss.Color("#282a36")).
+		Bold(true).
 		Padding(0, 1).
 		Render("ALL")
 
+	// Ticket counts with icons
 	left := fmt.Sprintf("%s  %s  %d tickets  %s %s %s %s",
 		filterBadge,
-		boardName,
+		lipgloss.NewStyle().Foreground(draculaPink).Bold(true).Render(boardName),
 		len(tickets),
-		todoStyle.Render(fmt.Sprintf("%d todo", counts[model.Todo])),
-		progStyle.Render(fmt.Sprintf("%d prog", counts[model.InProgress])),
-		doneStyle.Render(fmt.Sprintf("%d done", counts[model.Done])),
-		closedStyle.Render(fmt.Sprintf("%d closed", counts[model.Closed])),
+		lipgloss.NewStyle().Foreground(StatusColor(model.Todo)).Render(
+			fmt.Sprintf("○%d", counts[model.Todo])),
+		lipgloss.NewStyle().Foreground(StatusColor(model.InProgress)).Render(
+			fmt.Sprintf("◉%d", counts[model.InProgress])),
+		lipgloss.NewStyle().Foreground(StatusColor(model.Done)).Render(
+			fmt.Sprintf("✓%d", counts[model.Done])),
+		lipgloss.NewStyle().Foreground(StatusColor(model.Closed)).Render(
+			fmt.Sprintf("✗%d", counts[model.Closed])),
 	)
 
-	// Right side: keybind hints
-	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	// Right side: keybind hints with separators
+	keyStyle := lipgloss.NewStyle().Foreground(draculaCyan).Bold(true)
+	descStyle := lipgloss.NewStyle().Foreground(draculaComment)
+	sep := lipgloss.NewStyle().Foreground(draculaComment).Render(" │ ")
+
 	hints := []string{
-		hintStyle.Render("j/k") + " nav",
-		hintStyle.Render("/") + " filter",
-		hintStyle.Render("tab") + " focus",
-		hintStyle.Render("b") + " boards",
-		hintStyle.Render("r") + " refresh",
-		hintStyle.Render("q") + " quit",
+		fmt.Sprintf("%s %s", keyStyle.Render("j/k"), descStyle.Render("nav")),
+		fmt.Sprintf("%s %s", keyStyle.Render("/"), descStyle.Render("filter")),
+		fmt.Sprintf("%s %s", keyStyle.Render("tab"), descStyle.Render("focus")),
+		fmt.Sprintf("%s %s", keyStyle.Render("b"), descStyle.Render("boards")),
+		fmt.Sprintf("%s %s", keyStyle.Render("r"), descStyle.Render("refresh")),
+		fmt.Sprintf("%s %s", keyStyle.Render("q"), descStyle.Render("quit")),
 	}
-	right := strings.Join(hints, "  ")
+	right := strings.Join(hints, sep)
 
 	// Compose full bar
 	barStyle := lipgloss.NewStyle().
-		Background(lipgloss.Color("235")).
+		Background(draculaLine).
 		Width(width)
 
 	leftW := lipgloss.Width(left)
