@@ -27,3 +27,17 @@ func TestNewTicket_HasIDTitleAndStatus(t *testing.T) {
 		t.Fatal("expected CreatedAt to be recent")
 	}
 }
+
+func TestValidStatus_AcceptsTodoInProgressDone(t *testing.T) {
+	for _, s := range []Status{Todo, InProgress, Done} {
+		if !ValidStatus(s) {
+			t.Fatalf("expected %q to be valid", s)
+		}
+	}
+}
+
+func TestValidStatus_RejectsGarbage(t *testing.T) {
+	if ValidStatus("banana") {
+		t.Fatal("expected 'banana' to be invalid")
+	}
+}
