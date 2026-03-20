@@ -51,49 +51,51 @@ func (d ticketDelegate) Render(w io.Writer, m list.Model, index int, listItem li
 	t := ti.ticket
 
 	status := FormatStatus(t.Status)
-	statusStyle := lipgloss.NewStyle().
-		Foreground(StatusColor(t.Status)).
-		Width(7)
-
-	idStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		Width(9)
-
 	assignee := "--"
 	if t.Assignee != "" {
 		assignee = "@" + t.Assignee
 	}
-	assigneeStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("176")).
-		Width(9)
+	age := FormatAge(t.CreatedAt)
 
-	ageStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("245")).
-		Width(5)
-
-	titleStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("252"))
-
-	row := fmt.Sprintf("%s %s %s %s %s",
-		statusStyle.Render(status),
-		idStyle.Render(t.ID),
-		assigneeStyle.Render(assignee),
-		ageStyle.Render(FormatAge(t.CreatedAt)),
-		titleStyle.Render(t.Title),
-	)
+	// Fixed columns: STATUS(7) + ID(9) + ASSIGNEE(9) + AGE(5) + spaces(4) = 34
+	fixedW := 34
+	titleW := d.width - fixedW
+	if titleW < 4 {
+		titleW = 4
+	}
+	title := truncate(t.Title, titleW)
 
 	if index == m.Index() {
-		row = lipgloss.NewStyle().
+		row := lipgloss.NewStyle().
 			Background(lipgloss.Color("62")).
 			Foreground(lipgloss.Color("229")).
 			Bold(true).
-			Width(d.width).
-			Render(fmt.Sprintf(" %s  %s  %s  %s  %s",
-				status, t.ID, assignee, FormatAge(t.CreatedAt), t.Title,
-			))
+			MaxWidth(d.width).
+			Render(fmt.Sprintf("%-7s %-9s %-9s %-5s %s",
+				status, t.ID, assignee, age, title))
+		fmt.Fprint(w, row)
+		return
 	}
 
+	row := fmt.Sprintf("%s %s %s %s %s",
+		lipgloss.NewStyle().Foreground(StatusColor(t.Status)).Width(7).Render(status),
+		lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Width(9).Render(t.ID),
+		lipgloss.NewStyle().Foreground(lipgloss.Color("176")).Width(9).Render(assignee),
+		lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Width(5).Render(age),
+		lipgloss.NewStyle().Foreground(lipgloss.Color("252")).MaxWidth(titleW).Render(title),
+	)
 	fmt.Fprint(w, row)
+}
+
+// truncate cuts a string to maxLen, adding "..." if it was longer.
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	if maxLen <= 3 {
+		return s[:maxLen]
+	}
+	return s[:maxLen-3] + "..."
 }
 
 // ListPane wraps a bubbles/list for displaying tickets.
