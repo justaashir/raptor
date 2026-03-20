@@ -2,10 +2,16 @@ package tui
 
 import (
 	"raptor/model"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 )
+
+// stripAnsi removes ANSI escape sequences so glamour output can be substring-matched.
+var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+func stripAnsi(s string) string { return ansiRe.ReplaceAllString(s, "") }
 
 func TestNewDetailPane_Creates(t *testing.T) {
 	dp := NewDetailPane(60, 20)
@@ -27,10 +33,10 @@ func TestDetailPane_RenderDetail_FullTicket(t *testing.T) {
 		UpdatedAt: now.Add(-1 * time.Hour),
 	}
 
-	content := RenderDetailContent(ticket, 60)
+	content := stripAnsi(RenderDetailContent(ticket, 80))
 
 	if !strings.Contains(content, "Fix login redirect bug") {
-		t.Fatal("content should contain title")
+		t.Fatalf("content should contain title, got:\n%s", content)
 	}
 	if !strings.Contains(content, "a1b2c3d4") {
 		t.Fatal("content should contain ID")
@@ -56,12 +62,11 @@ func TestDetailPane_RenderDetail_EmptyContent(t *testing.T) {
 		Status: model.Done,
 	}
 
-	content := RenderDetailContent(ticket, 60)
+	content := stripAnsi(RenderDetailContent(ticket, 80))
 
 	if !strings.Contains(content, "No content ticket") {
-		t.Fatal("content should contain title")
+		t.Fatalf("content should contain title, got:\n%s", content)
 	}
-	// Should still render without error even with empty content
 	if content == "" {
 		t.Fatal("content should not be empty")
 	}
@@ -76,7 +81,7 @@ func TestDetailPane_RenderDetail_NilTicket(t *testing.T) {
 }
 
 func TestDetailPane_SetTicket_UpdatesContent(t *testing.T) {
-	dp := NewDetailPane(60, 20)
+	dp := NewDetailPane(80, 20)
 	ticket := &model.Ticket{
 		ID:     "a1b2c3d4",
 		Title:  "Test ticket",
@@ -84,9 +89,9 @@ func TestDetailPane_SetTicket_UpdatesContent(t *testing.T) {
 	}
 
 	dp.SetTicket(ticket)
-	view := dp.View()
+	view := stripAnsi(dp.View())
 
 	if !strings.Contains(view, "Test ticket") {
-		t.Fatal("view should contain ticket title after SetTicket")
+		t.Fatalf("view should contain ticket title after SetTicket, got:\n%s", view)
 	}
 }

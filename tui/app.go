@@ -29,6 +29,7 @@ type App struct {
 	board      string
 	boardName  string
 	wsName     string
+	cachePath  string
 	listPane   *ListPane
 	detailPane *DetailPane
 	focused    focusPane
@@ -50,6 +51,12 @@ type boardsMsg struct {
 	boards    []model.Board
 	workspace string
 }
+type boardAutoSelectedMsg struct {
+	workspace string
+	wsName    string
+	board     string
+	boardName string
+}
 
 func NewApp(serverURL, token, workspace, board string) *App {
 	return &App{
@@ -57,6 +64,7 @@ func NewApp(serverURL, token, workspace, board string) *App {
 		token:      token,
 		workspace:  workspace,
 		board:      board,
+		cachePath:  DefaultCachePath(),
 		focused:    focusList,
 		listPane:   NewListPane(40, 20),
 		detailPane: NewDetailPane(60, 20),
@@ -112,6 +120,13 @@ func (a *App) toggleFocus() {
 // Bubble Tea interface
 
 func (a *App) Init() tea.Cmd {
+	// Load cached tickets instantly so the UI isn't empty while we fetch
+	if a.board != "" && a.cachePath != "" {
+		if cached, _ := LoadTicketCache(a.cachePath, a.board); len(cached) > 0 {
+			a.SetTickets(cached)
+		}
+	}
+
 	if a.workspace == "" || a.board == "" {
 		return a.fetchBoards
 	}
@@ -127,8 +142,24 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ticketsMsg:
 		a.SetTickets([]model.Ticket(msg))
+		if a.cachePath != "" && a.board != "" {
+			SaveTicketCache(a.cachePath, a.board, []model.Ticket(msg))
+		}
 
 	case wsMsg:
+		return a, tea.Batch(a.fetchTickets, a.listenWS)
+
+	case boardAutoSelectedMsg:
+		a.workspace = msg.workspace
+		a.wsName = msg.wsName
+		a.board = msg.board
+		a.boardName = msg.boardName
+		a.state = viewList
+		if a.cachePath != "" {
+			if cached, _ := LoadTicketCache(a.cachePath, a.board); len(cached) > 0 {
+				a.SetTickets(cached)
+			}
+		}
 		return a, tea.Batch(a.fetchTickets, a.listenWS)
 
 	case boardsMsg:
@@ -328,12 +359,12 @@ func (a *App) fetchBoards() tea.Msg {
 	}
 
 	if len(workspaces) == 1 && len(boards) == 1 {
-		a.workspace = ws.ID
-		a.wsName = ws.Name
-		a.board = boards[0].ID
-		a.boardName = boards[0].Name
-		a.state = viewList
-		return a.fetchTickets()
+		return boardAutoSelectedMsg{
+			workspace: ws.ID,
+			wsName:    ws.Name,
+			board:     boards[0].ID,
+			boardName: boards[0].Name,
+		}
 	}
 
 	return boardsMsg{boards: boards, workspace: ws.Name}
