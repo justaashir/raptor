@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"raptor/model"
 	"strings"
 	"time"
 )
@@ -136,8 +137,8 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 		}
 		// If no allowlist and no workspace members exist yet (fresh install), allow anyone
 		if !allowed && len(s.allowedUsers) == 0 {
-			var count int
-			s.db.conn.QueryRow(`SELECT COUNT(*) FROM workspace_members`).Scan(&count)
+			var count int64
+			s.db.conn.Model(&model.WorkspaceMember{}).Count(&count)
 			if count == 0 {
 				allowed = true
 			}
