@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -86,6 +87,27 @@ var updateCmd = &cobra.Command{
 		}
 
 		fmt.Printf("Updated to %s\n", latest)
+
+		// Update Claude Code skill (enforce HTTPS, size limit)
+		skillURL := serverURL + "/api/skill"
+		if strings.HasPrefix(skillURL, "http://") && !strings.Contains(skillURL, "localhost") && !strings.Contains(skillURL, "127.0.0.1") {
+			fmt.Println("Skipping skill update: server is not HTTPS")
+		} else {
+			skillResp, err := http.Get(skillURL)
+			if err == nil && skillResp.StatusCode == http.StatusOK {
+				defer skillResp.Body.Close()
+				const maxSkillSize = 64 * 1024 // 64KB
+				skillData, _ := io.ReadAll(io.LimitReader(skillResp.Body, maxSkillSize))
+				if len(skillData) > 0 {
+					homeDir, _ := os.UserHomeDir()
+					skillDir := homeDir + "/.claude/skills/raptor"
+					os.MkdirAll(skillDir, 0o755)
+					os.WriteFile(skillDir+"/SKILL.md", skillData, 0o644)
+					fmt.Println("Claude Code skill updated.")
+				}
+			}
+		}
+
 		return nil
 	},
 }

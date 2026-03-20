@@ -3,6 +3,9 @@ package server
 import (
 	"raptor/model"
 	"testing"
+	"time"
+
+	"gorm.io/gorm"
 )
 
 func TestDB_CreateAndGetTicket(t *testing.T) {
@@ -413,6 +416,256 @@ func TestDB_DeleteWorkspace(t *testing.T) {
 	workspaces, _ := db.ListWorkspacesForUser("alice")
 	if len(workspaces) != 0 {
 		t.Fatalf("expected 0 workspaces after delete, got %d", len(workspaces))
+	}
+}
+
+func TestDB_CloseTicket_SetsClosedStatusAndReason(t *testing.T) {
+	db := newTestDB(t)
+	ticket := model.NewTicket("Close me", "", "alice")
+	db.CreateTicket(ticket)
+
+	now := time.Now()
+	err := db.UpdateTicket(ticket.ID, map[string]any{
+		"status":       "closed",
+		"close_reason": "done with this",
+		"closed_at":    now,
+	})
+	if err != nil {
+		t.Fatalf("failed to close ticket: %v", err)
+	}
+
+	got, _ := db.GetTicket(ticket.ID)
+	if got.Status != model.Closed {
+		t.Fatalf("expected status closed, got %q", got.Status)
+	}
+	if got.CloseReason != "done with this" {
+		t.Fatalf("expected close reason %q, got %q", "done with this", got.CloseReason)
+	}
+	if got.ClosedAt == nil {
+		t.Fatal("expected ClosedAt to be set")
+	}
+}
+
+func TestDB_ListTickets_ExcludesClosedByDefault(t *testing.T) {
+	db := newTestDB(t)
+	t1 := model.NewTicket("Open task", "", "alice")
+	db.CreateTicket(t1)
+
+	t2 := model.NewTicket("Closed task", "", "alice")
+	t2.Status = model.Closed
+	db.CreateTicket(t2)
+
+	tickets, err := db.ListTickets("", "")
+	if err != nil {
+		t.Fatalf("failed to list: %v", err)
+	}
+	if len(tickets) != 1 {
+		t.Fatalf("expected 1 ticket (closed excluded), got %d", len(tickets))
+	}
+	if tickets[0].Title != "Open task" {
+		t.Fatalf("expected Open task, got %q", tickets[0].Title)
+	}
+}
+
+func TestDB_ListTickets_IncludesClosedWhenFiltered(t *testing.T) {
+	db := newTestDB(t)
+	t1 := model.NewTicket("Open task", "", "alice")
+	db.CreateTicket(t1)
+
+	t2 := model.NewTicket("Closed task", "", "alice")
+	t2.Status = model.Closed
+	db.CreateTicket(t2)
+
+	tickets, err := db.ListTickets("", "closed")
+	if err != nil {
+		t.Fatalf("failed to list: %v", err)
+	}
+	if len(tickets) != 1 {
+		t.Fatalf("expected 1 closed ticket, got %d", len(tickets))
+	}
+	if tickets[0].Title != "Closed task" {
+		t.Fatalf("expected Closed task, got %q", tickets[0].Title)
+	}
+}
+
+func TestDB_SearchTickets(t *testing.T) {
+	db := newTestDB(t)
+	t1 := model.NewTicket("Fix login bug", "auth is broken", "alice")
+	db.CreateTicket(t1)
+	t2 := model.NewTicket("Add dashboard", "new feature", "alice")
+	db.CreateTicket(t2)
+	t3 := model.NewTicket("Update readme", "", "alice")
+	db.CreateTicket(t3)
+
+	// Search by title
+	tickets, err := db.SearchTickets("", "login")
+	if err != nil {
+		t.Fatalf("failed to search: %v", err)
+	}
+	if len(tickets) != 1 {
+		t.Fatalf("expected 1 result for 'login', got %d", len(tickets))
+	}
+	if tickets[0].Title != "Fix login bug" {
+		t.Fatalf("expected 'Fix login bug', got %q", tickets[0].Title)
+	}
+
+	// Search by content
+	tickets, _ = db.SearchTickets("", "feature")
+	if len(tickets) != 1 {
+		t.Fatalf("expected 1 result for 'feature', got %d", len(tickets))
+	}
+
+	// Case insensitive
+	tickets, _ = db.SearchTickets("", "LOGIN")
+	if len(tickets) != 1 {
+		t.Fatalf("expected case-insensitive match, got %d", len(tickets))
+	}
+
+	// No match
+	tickets, _ = db.SearchTickets("", "nonexistent")
+	if len(tickets) != 0 {
+		t.Fatalf("expected 0 results, got %d", len(tickets))
+	}
+}
+
+func TestDB_SearchTickets_ExcludesClosed(t *testing.T) {
+	db := newTestDB(t)
+	t1 := model.NewTicket("Open login bug", "", "alice")
+	db.CreateTicket(t1)
+	t2 := model.NewTicket("Closed login issue", "", "alice")
+	t2.Status = model.Closed
+	db.CreateTicket(t2)
+
+	tickets, _ := db.SearchTickets("", "login")
+	if len(tickets) != 1 {
+		t.Fatalf("expected 1 result (closed excluded), got %d", len(tickets))
+	}
+}
+
+func TestDB_ReopenTicket_ClearsClosedAt(t *testing.T) {
+	db := newTestDB(t)
+	ticket := model.NewTicket("Reopen me", "", "alice")
+	db.CreateTicket(ticket)
+
+	// Close it
+	now := time.Now()
+	db.UpdateTicket(ticket.ID, map[string]any{
+		"status":       "closed",
+		"close_reason": "done",
+		"closed_at":    now,
+	})
+	got, _ := db.GetTicket(ticket.ID)
+	if got.ClosedAt == nil {
+		t.Fatal("expected ClosedAt to be set after close")
+	}
+
+	// Reopen it using gorm.Expr("NULL") for closed_at
+	db.UpdateTicket(ticket.ID, map[string]any{
+		"status":       "todo",
+		"close_reason": "",
+		"closed_at":    gorm.Expr("NULL"),
+	})
+	got, _ = db.GetTicket(ticket.ID)
+	if got.Status != model.Todo {
+		t.Fatalf("expected status todo, got %q", got.Status)
+	}
+	if got.CloseReason != "" {
+		t.Fatalf("expected empty close reason, got %q", got.CloseReason)
+	}
+	if got.ClosedAt != nil {
+		t.Fatal("expected ClosedAt to be nil after reopen")
+	}
+}
+
+func TestDB_ListAllTickets(t *testing.T) {
+	db := newTestDB(t)
+	t1 := model.NewTicket("Open task", "", "alice")
+	db.CreateTicket(t1)
+	t2 := model.NewTicket("Closed task", "", "alice")
+	t2.Status = model.Closed
+	db.CreateTicket(t2)
+
+	tickets, err := db.ListAllTickets("")
+	if err != nil {
+		t.Fatalf("failed to list all: %v", err)
+	}
+	if len(tickets) != 2 {
+		t.Fatalf("expected 2 tickets, got %d", len(tickets))
+	}
+}
+
+func TestDB_SearchTickets_SQLWildcards(t *testing.T) {
+	db := newTestDB(t)
+	t1 := model.NewTicket("100% done", "", "alice")
+	db.CreateTicket(t1)
+	t2 := model.NewTicket("Regular task", "", "alice")
+	db.CreateTicket(t2)
+
+	// Searching for literal "%" should only match the ticket containing it
+	tickets, err := db.SearchTickets("", "%")
+	if err != nil {
+		t.Fatalf("failed to search: %v", err)
+	}
+	if len(tickets) != 1 {
+		t.Fatalf("expected 1 result for literal '%%', got %d", len(tickets))
+	}
+	if tickets[0].Title != "100% done" {
+		t.Fatalf("expected '100%% done', got %q", tickets[0].Title)
+	}
+}
+
+func TestDB_SearchTickets_BoardScoped(t *testing.T) {
+	db := newTestDB(t)
+	t1 := model.NewTicket("Login bug", "", "alice")
+	t1.BoardID = "bd1"
+	db.CreateTicket(t1)
+
+	t2 := model.NewTicket("Login issue", "", "alice")
+	t2.BoardID = "bd2"
+	db.CreateTicket(t2)
+
+	// Search scoped to bd1
+	tickets, err := db.SearchTickets("bd1", "Login")
+	if err != nil {
+		t.Fatalf("failed to search: %v", err)
+	}
+	if len(tickets) != 1 {
+		t.Fatalf("expected 1 result scoped to bd1, got %d", len(tickets))
+	}
+	if tickets[0].BoardID != "bd1" {
+		t.Fatalf("expected board bd1, got %q", tickets[0].BoardID)
+	}
+}
+
+func TestDB_TicketStats(t *testing.T) {
+	db := newTestDB(t)
+	t1 := model.NewTicket("Task 1", "", "alice")
+	t1.BoardID = "b1"
+	db.CreateTicket(t1)
+	t2 := model.NewTicket("Task 2", "", "alice")
+	t2.BoardID = "b1"
+	t2.Status = model.InProgress
+	db.CreateTicket(t2)
+	t3 := model.NewTicket("Task 3", "", "alice")
+	t3.BoardID = "b1"
+	t3.Status = model.Closed
+	db.CreateTicket(t3)
+
+	counts, err := db.TicketStats("b1")
+	if err != nil {
+		t.Fatalf("failed to get stats: %v", err)
+	}
+	if counts["todo"] != 1 {
+		t.Fatalf("expected 1 todo, got %d", counts["todo"])
+	}
+	if counts["in_progress"] != 1 {
+		t.Fatalf("expected 1 in_progress, got %d", counts["in_progress"])
+	}
+	if counts["closed"] != 1 {
+		t.Fatalf("expected 1 closed, got %d", counts["closed"])
+	}
+	if counts["done"] != 0 {
+		t.Fatalf("expected 0 done, got %d", counts["done"])
 	}
 }
 

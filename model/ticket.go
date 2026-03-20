@@ -12,24 +12,27 @@ const (
 	Todo       Status = "todo"
 	InProgress Status = "in_progress"
 	Done       Status = "done"
+	Closed     Status = "closed"
 )
 
 type Ticket struct {
 	ID         string    `json:"id" gorm:"primaryKey"`
 	Title      string    `json:"title" gorm:"not null"`
 	Content    string    `json:"content" gorm:"default:''"`
-	Status     Status    `json:"status" gorm:"not null;default:'todo'"`
-	BoardID    string    `json:"board_id" gorm:"default:'';constraint:OnDelete:CASCADE"`
+	Status     Status    `json:"status" gorm:"not null;default:'todo';index:idx_board_status"`
+	BoardID    string    `json:"board_id" gorm:"default:'';index:idx_board_status;constraint:OnDelete:CASCADE"`
 	CreatedBy  string    `json:"created_by" gorm:"default:''"`
 	Assignee   string    `json:"assignee" gorm:"default:''"`
 	AssignedBy string    `json:"assigned_by" gorm:"default:''"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	ClosedAt    *time.Time `json:"closed_at,omitempty"`
+	CloseReason string     `json:"close_reason,omitempty" gorm:"default:''"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
 func ValidStatus(s Status) bool {
 	switch s {
-	case Todo, InProgress, Done:
+	case Todo, InProgress, Done, Closed:
 		return true
 	}
 	return false

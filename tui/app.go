@@ -289,7 +289,7 @@ func (a *App) viewBoardSelector() string {
 
 func (a *App) fetchTickets() tea.Msg {
 	c := client.NewScoped(a.serverURL, a.token, a.workspace, a.board)
-	resp, err := c.ListTickets("", false)
+	resp, err := c.ListTickets(client.ListOptions{})
 	if err != nil {
 		return errMsg(err)
 	}
@@ -365,6 +365,7 @@ func (a *App) cycleStatus(t *model.Ticket) tea.Cmd {
 			model.Todo:       model.InProgress,
 			model.InProgress: model.Done,
 			model.Done:       model.Todo,
+			model.Closed:     model.Todo,
 		}
 		newStatus := next[t.Status]
 		c := client.NewScoped(a.serverURL, a.token, a.workspace, a.board)

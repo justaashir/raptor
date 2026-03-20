@@ -10,7 +10,11 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the raptor version",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("raptor %s\n", Version)
+		if jsonOutput {
+			printJSON(map[string]string{"version": Version})
+		} else {
+			fmt.Printf("raptor %s\n", Version)
+		}
 	},
 }
 

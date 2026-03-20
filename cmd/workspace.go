@@ -24,7 +24,11 @@ var wsCreateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Created workspace %s: %s\n", ws.ID, ws.Name)
+		if jsonOutput {
+			printJSON(ws)
+		} else {
+			fmt.Printf("Created workspace %s: %s\n", ws.ID, ws.Name)
+		}
 		return nil
 	},
 }
@@ -37,6 +41,10 @@ var wsListCmd = &cobra.Command{
 		workspaces, err := c.ListWorkspaces()
 		if err != nil {
 			return err
+		}
+		if jsonOutput {
+			printJSON(workspaces)
+			return nil
 		}
 		if len(workspaces) == 0 {
 			fmt.Println("No workspaces found.")
@@ -90,6 +98,10 @@ var wsMembersCmd = &cobra.Command{
 		members, err := c.ListWorkspaceMembers(activeWS)
 		if err != nil {
 			return err
+		}
+		if jsonOutput {
+			printJSON(members)
+			return nil
 		}
 		for _, m := range members {
 			fmt.Printf("%s  %s\n", m.Username, m.Role)

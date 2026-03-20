@@ -39,7 +39,11 @@ var editCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Updated ticket %s: %s\n", ticket.ID, ticket.Title)
+		if jsonOutput {
+			printJSON(ticket)
+		} else {
+			fmt.Printf("Updated ticket %s: %s\n", ticket.ID, ticket.Title)
+		}
 		return nil
 	},
 }

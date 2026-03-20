@@ -6,13 +6,20 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"log"
 	"raptor/model"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"nhooyr.io/websocket"
 )
+
+var allowedPatchFields = map[string]bool{
+	"title": true, "content": true, "status": true,
+	"assignee": true, "close_reason": true,
+}
 
 type Server struct {
 	db           *DB
@@ -39,6 +46,7 @@ func NewServer(db *DB, hub *Hub, opts ...Option) *Server {
 	}
 	s.mux.HandleFunc("/api/workspaces/", s.handleWorkspaces)
 	s.mux.HandleFunc("/api/version", s.handleVersion)
+	s.mux.HandleFunc("/api/skill", s.handleSkill)
 	s.mux.HandleFunc("/api/auth", s.handleAuth)
 	s.mux.HandleFunc("/install.sh", s.handleInstallScript)
 	s.mux.HandleFunc("/ws", s.handleWS)
@@ -458,11 +466,38 @@ func (s *Server) handleBoardTickets(w http.ResponseWriter, r *http.Request, wid,
 
 	switch r.Method {
 	case http.MethodGet:
+		// Server-side stats aggregation
+		if r.URL.Query().Get("stats") == "true" {
+			counts, err := s.db.TicketStats(bid)
+			if err != nil {
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+				return
+			}
+			total := 0
+			for _, c := range counts {
+				total += c
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{"total": total, "counts": counts})
+			return
+		}
+
 		status := r.URL.Query().Get("status")
 		mine := r.URL.Query().Get("mine")
-		tickets, err := s.db.ListTickets(bid, status)
+		all := r.URL.Query().Get("all")
+		query := r.URL.Query().Get("q")
+		var tickets []model.Ticket
+		var err error
+		if query != "" {
+			tickets, err = s.db.SearchTickets(bid, query)
+		} else if all == "true" {
+			tickets, err = s.db.ListAllTickets(bid)
+		} else {
+			tickets, err = s.db.ListTickets(bid, status)
+		}
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Printf("ticket list error: %v", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
 		if mine == "true" && username != "" {
@@ -540,8 +575,35 @@ func (s *Server) handleBoardTicket(w http.ResponseWriter, r *http.Request, wid, 
 	case http.MethodPatch:
 		var fields map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&fields); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
+		}
+		// Whitelist allowed fields to prevent mass assignment
+		for k := range fields {
+			if !allowedPatchFields[k] {
+				delete(fields, k)
+			}
+		}
+		if len(fields) == 0 {
+			http.Error(w, `{"error":"no valid fields"}`, http.StatusBadRequest)
+			return
+		}
+		// Validate status if provided
+		if s, ok := fields["status"].(string); ok {
+			if !model.ValidStatus(model.Status(s)) {
+				http.Error(w, `{"error":"invalid status"}`, http.StatusBadRequest)
+				return
+			}
+			// Set closed_at server-side on status transitions
+			if model.Status(s) == model.Closed {
+				fields["closed_at"] = time.Now()
+			} else {
+				// Clear close fields when reopening
+				fields["closed_at"] = gorm.Expr("NULL")
+				if _, hasReason := fields["close_reason"]; !hasReason {
+					fields["close_reason"] = ""
+				}
+			}
 		}
 		if assignee, ok := fields["assignee"].(string); ok && assignee != "" {
 			isMember, _ := s.db.IsBoardMember(bid, assignee)
@@ -552,7 +614,8 @@ func (s *Server) handleBoardTicket(w http.ResponseWriter, r *http.Request, wid, 
 			fields["assigned_by"] = UsernameFromContext(r.Context())
 		}
 		if err := s.db.UpdateTicket(tid, fields); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Printf("ticket update error: %v", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
 		s.hub.Broadcast([]byte(`{"event":"ticket_changed"}`))

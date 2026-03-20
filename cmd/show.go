@@ -21,6 +21,10 @@ var showCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		if jsonOutput {
+			printJSON(ticket)
+			return nil
+		}
 		fmt.Printf("ID:       %s\n", ticket.ID)
 		fmt.Printf("Title:    %s\n", ticket.Title)
 		fmt.Printf("Status:   %s\n", ticket.Status)
@@ -35,6 +39,12 @@ var showCmd = &cobra.Command{
 		}
 		fmt.Printf("Created:  %s\n", ticket.CreatedAt.Format("2006-01-02 15:04"))
 		fmt.Printf("Updated:  %s\n", ticket.UpdatedAt.Format("2006-01-02 15:04"))
+		if ticket.ClosedAt != nil {
+			fmt.Printf("Closed:   %s\n", ticket.ClosedAt.Format("2006-01-02 15:04"))
+		}
+		if ticket.CloseReason != "" {
+			fmt.Printf("Reason:   %s\n", ticket.CloseReason)
+		}
 		if ticket.Content != "" {
 			fmt.Println()
 			rendered, err := glamour.Render(ticket.Content, "dark")

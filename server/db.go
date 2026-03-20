@@ -242,6 +242,16 @@ func (db *DB) CreateTicket(t model.Ticket) error {
 	return db.conn.Create(&t).Error
 }
 
+func (db *DB) ListAllTickets(boardID string) ([]model.Ticket, error) {
+	var tickets []model.Ticket
+	q := db.conn.Model(&model.Ticket{})
+	if boardID != "" {
+		q = q.Where("board_id = ?", boardID)
+	}
+	err := q.Order("created_at DESC").Find(&tickets).Error
+	return tickets, err
+}
+
 func (db *DB) ListTickets(boardID, status string) ([]model.Ticket, error) {
 	var tickets []model.Ticket
 	q := db.conn.Model(&model.Ticket{})
@@ -250,9 +260,50 @@ func (db *DB) ListTickets(boardID, status string) ([]model.Ticket, error) {
 	}
 	if status != "" {
 		q = q.Where("status = ?", status)
+	} else {
+		q = q.Where("status != ?", model.Closed)
 	}
 	err := q.Order("created_at DESC").Find(&tickets).Error
 	return tickets, err
+}
+
+// likeEscaper escapes SQL LIKE wildcards in user input.
+var likeEscaper = strings.NewReplacer("%", "\\%", "_", "\\_")
+
+func (db *DB) SearchTickets(boardID, query string) ([]model.Ticket, error) {
+	var tickets []model.Ticket
+	// Escape LIKE wildcards in user input
+	escaped := likeEscaper.Replace(query)
+	q := db.conn.Model(&model.Ticket{}).
+		Where("status != ?", model.Closed).
+		Where("(title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\')", "%"+escaped+"%", "%"+escaped+"%")
+	if boardID != "" {
+		q = q.Where("board_id = ?", boardID)
+	}
+	err := q.Order("created_at DESC").Find(&tickets).Error
+	return tickets, err
+}
+
+func (db *DB) TicketStats(boardID string) (map[string]int, error) {
+	type result struct {
+		Status string
+		Count  int
+	}
+	var results []result
+	q := db.conn.Model(&model.Ticket{}).Select("status, count(*) as count").Group("status")
+	if boardID != "" {
+		q = q.Where("board_id = ?", boardID)
+	}
+	if err := q.Find(&results).Error; err != nil {
+		return nil, err
+	}
+	counts := map[string]int{
+		"todo": 0, "in_progress": 0, "done": 0, "closed": 0,
+	}
+	for _, r := range results {
+		counts[r.Status] = r.Count
+	}
+	return counts, nil
 }
 
 func (db *DB) UpdateTicket(id string, fields map[string]any) error {

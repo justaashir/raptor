@@ -1,10 +1,16 @@
 package server
 
 import (
+	"embed"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"regexp"
 )
+
+//go:embed skill/SKILL.md
+var skillFS embed.FS
 
 // Set via the server package or main. Defaults to "dev".
 var CurrentVersion = "dev"
@@ -14,6 +20,16 @@ const githubRepo = "justaashir/raptor"
 func (s *Server) handleVersion(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"version": CurrentVersion})
+}
+
+func (s *Server) handleSkill(w http.ResponseWriter, r *http.Request) {
+	data, err := skillFS.ReadFile("skill/SKILL.md")
+	if err != nil {
+		http.Error(w, "skill not found", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain")
+	w.Write(data)
 }
 
 func (s *Server) handleInstallScript(w http.ResponseWriter, r *http.Request) {
@@ -36,43 +52,10 @@ echo "Downloading raptor for $OS/$ARCH..."
 curl -fsSL "%s/raptor-${OS}-${ARCH}" -o "$INSTALL_DIR/raptor"
 chmod +x "$INSTALL_DIR/raptor"
 
-# Install Claude Code skill
+# Install Claude Code skill (fetched from server so it stays up to date)
 SKILL_DIR="$HOME/.claude/skills/raptor"
 mkdir -p "$SKILL_DIR"
-cat > "$SKILL_DIR/SKILL.md" << 'SKILLEOF'
----
-name: raptor
-description: Manage the Raptor kanban board via natural language
-user-invocable: true
-allowed-tools:
-  - Bash(raptor *)
----
-
-# Raptor Board Assistant
-
-You manage a multiplayer kanban board using the raptor CLI.
-
-## Available Commands
-
-- raptor list [--status todo|in_progress|done] — List tickets (optionally filter by status)
-- raptor add "title" [-c "markdown content"] — Create a new ticket
-- raptor show <id> — Show ticket details
-- raptor move <id> <status> — Move ticket (todo, in_progress, done)
-- raptor edit <id> [-t "title"] [-c "content"] [-s status] — Edit a ticket
-- raptor rm <id> — Delete a ticket
-
-## Workflow
-
-1. Always run raptor list first to see current board state
-2. Use short ticket IDs (first 8 chars) — raptor accepts partial IDs
-3. When adding tickets, include meaningful descriptions with -c flag using markdown
-4. Confirm destructive actions (rm, move to done) before executing
-5. After making changes, run raptor list to show the updated board
-
-## Output Format
-
-raptor list outputs a formatted table. raptor show outputs ticket details with rendered markdown.
-SKILLEOF
+curl -fsSL "%s/api/skill" -o "$SKILL_DIR/SKILL.md"
 
 echo ""
 echo "raptor installed to $INSTALL_DIR/raptor"
@@ -81,8 +64,32 @@ echo ""
 if ! echo "$PATH" | grep -q "$INSTALL_DIR"; then
     echo "Add to your PATH:  export PATH=\"\$HOME/.local/bin:\$PATH\""
 fi
-`, ghURL)
+`, ghURL, serverBaseURL(r))
 
 	w.Header().Set("Content-Type", "text/plain")
 	w.Write([]byte(script))
+}
+
+// validHost matches safe hostname:port values only.
+var validHost = regexp.MustCompile(`^[a-zA-Z0-9._:-]+$`)
+
+// serverBaseURL derives the server's public URL from the request.
+// Prefers SERVER_BASE_URL env var if set. Validates headers to prevent injection.
+func serverBaseURL(r *http.Request) string {
+	if base := os.Getenv("SERVER_BASE_URL"); base != "" {
+		return base
+	}
+	scheme := "https"
+	if r.TLS == nil {
+		if fwd := r.Header.Get("X-Forwarded-Proto"); fwd == "http" || fwd == "https" {
+			scheme = fwd
+		} else {
+			scheme = "http"
+		}
+	}
+	host := r.Host
+	if !validHost.MatchString(host) {
+		return "https://raptor.raptorthree.com"
+	}
+	return fmt.Sprintf("%s://%s", scheme, host)
 }

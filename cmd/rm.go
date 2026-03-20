@@ -25,7 +25,11 @@ var rmCmd = &cobra.Command{
 		if err := c.DeleteTicket(args[0]); err != nil {
 			return err
 		}
-		fmt.Printf("Deleted ticket %s\n", args[0])
+		if jsonOutput {
+			printJSON(map[string]string{"deleted": args[0]})
+		} else {
+			fmt.Printf("Deleted ticket %s\n", args[0])
+		}
 		return nil
 	},
 }
