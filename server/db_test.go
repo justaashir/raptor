@@ -200,6 +200,112 @@ func TestDB_RemoveWorkspaceMember(t *testing.T) {
 	}
 }
 
+func TestDB_CreateBoard(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateWorkspace("ws1", "Team", "alice")
+
+	err := db.CreateBoard("bd1", "ws1", "Sprint 1", "alice")
+	if err != nil {
+		t.Fatalf("failed to create board: %v", err)
+	}
+
+	boards, err := db.ListBoardsForUser("ws1", "alice")
+	if err != nil {
+		t.Fatalf("failed to list boards: %v", err)
+	}
+	if len(boards) != 1 {
+		t.Fatalf("expected 1 board, got %d", len(boards))
+	}
+	if boards[0].Name != "Sprint 1" {
+		t.Fatalf("expected name %q, got %q", "Sprint 1", boards[0].Name)
+	}
+}
+
+func TestDB_ListBoardsForUser_MemberAccess(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateWorkspace("ws1", "Team", "alice")
+	db.AddWorkspaceMember("ws1", "bob", "member")
+	db.CreateBoard("bd1", "ws1", "Board 1", "alice")
+	db.CreateBoard("bd2", "ws1", "Board 2", "alice")
+
+	// bob has no board grants yet — should see no boards
+	boards, _ := db.ListBoardsForUser("ws1", "bob")
+	if len(boards) != 0 {
+		t.Fatalf("expected 0 boards for bob, got %d", len(boards))
+	}
+
+	// Grant bob access to Board 1
+	db.AddBoardMember("bd1", "bob")
+	boards, _ = db.ListBoardsForUser("ws1", "bob")
+	if len(boards) != 1 {
+		t.Fatalf("expected 1 board for bob, got %d", len(boards))
+	}
+	if boards[0].Name != "Board 1" {
+		t.Fatalf("expected Board 1, got %q", boards[0].Name)
+	}
+
+	// alice (owner) sees all boards
+	boards, _ = db.ListBoardsForUser("ws1", "alice")
+	if len(boards) != 2 {
+		t.Fatalf("expected 2 boards for alice (owner), got %d", len(boards))
+	}
+}
+
+func TestDB_DeleteBoard(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateWorkspace("ws1", "Team", "alice")
+	db.CreateBoard("bd1", "ws1", "Sprint", "alice")
+
+	err := db.DeleteBoard("bd1")
+	if err != nil {
+		t.Fatalf("failed to delete board: %v", err)
+	}
+	boards, _ := db.ListBoardsForUser("ws1", "alice")
+	if len(boards) != 0 {
+		t.Fatalf("expected 0 boards after delete, got %d", len(boards))
+	}
+}
+
+func TestDB_BoardMembers(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateWorkspace("ws1", "Team", "alice")
+	db.CreateBoard("bd1", "ws1", "Sprint", "alice")
+	db.AddWorkspaceMember("ws1", "bob", "member")
+
+	err := db.AddBoardMember("bd1", "bob")
+	if err != nil {
+		t.Fatalf("failed to add board member: %v", err)
+	}
+
+	members, err := db.ListBoardMembers("bd1")
+	if err != nil {
+		t.Fatalf("failed to list board members: %v", err)
+	}
+	if len(members) != 1 {
+		t.Fatalf("expected 1 board member, got %d", len(members))
+	}
+
+	isMember, _ := db.IsBoardMember("bd1", "bob")
+	if !isMember {
+		t.Fatal("expected bob to be a board member")
+	}
+
+	// owner has implicit access
+	isMember, _ = db.IsBoardMember("bd1", "alice")
+	if !isMember {
+		t.Fatal("expected alice (owner) to have implicit board access")
+	}
+
+	err = db.RemoveBoardMember("bd1", "bob")
+	if err != nil {
+		t.Fatalf("failed to remove board member: %v", err)
+	}
+	isMember, _ = db.IsBoardMember("bd1", "bob")
+	if isMember {
+		t.Fatal("expected bob to no longer be a board member")
+	}
+}
+
 func TestDB_DeleteWorkspace(t *testing.T) {
 	db := newTestDB(t)
 	db.CreateWorkspace("ws1", "Team", "alice")

@@ -127,6 +127,15 @@ func (db *DB) DeleteWorkspace(id string) error {
 	return err
 }
 
+// IsWorkspaceMember checks if a user belongs to any workspace (for auth)
+func (db *DB) IsWorkspaceMember(username string) (bool, error) {
+	var count int
+	err := db.conn.QueryRow(
+		`SELECT COUNT(*) FROM workspace_members WHERE username = ?`, username,
+	).Scan(&count)
+	return count > 0, err
+}
+
 func (db *DB) ListWorkspacesForUser(username string) ([]model.Workspace, error) {
 	rows, err := db.conn.Query(
 		`SELECT w.id, w.name, w.created_by, w.created_at FROM workspaces w
@@ -148,6 +157,133 @@ func (db *DB) ListWorkspacesForUser(username string) ([]model.Workspace, error) 
 	}
 	return workspaces, rows.Err()
 }
+
+// Board methods
+
+func (db *DB) CreateBoard(id, workspaceID, name, createdBy string) error {
+	_, err := db.conn.Exec(
+		`INSERT INTO boards (id, workspace_id, name, created_by) VALUES (?, ?, ?, ?)`,
+		id, workspaceID, name, createdBy,
+	)
+	return err
+}
+
+func (db *DB) ListBoardsForUser(workspaceID, username string) ([]model.Board, error) {
+	// Owners/admins see all boards in workspace; members only see granted boards
+	role, err := db.GetMemberRole(workspaceID, username)
+	if err != nil {
+		return nil, nil // not a member
+	}
+
+	var rows *sql.Rows
+	if role == "owner" || role == "admin" {
+		rows, err = db.conn.Query(
+			`SELECT id, workspace_id, name, created_by, created_at FROM boards WHERE workspace_id = ? ORDER BY created_at`,
+			workspaceID,
+		)
+	} else {
+		rows, err = db.conn.Query(
+			`SELECT b.id, b.workspace_id, b.name, b.created_by, b.created_at FROM boards b
+			 JOIN board_members bm ON b.id = bm.board_id
+			 WHERE b.workspace_id = ? AND bm.username = ?
+			 ORDER BY b.created_at`,
+			workspaceID, username,
+		)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var boards []model.Board
+	for rows.Next() {
+		var b model.Board
+		if err := rows.Scan(&b.ID, &b.WorkspaceID, &b.Name, &b.CreatedBy, &b.CreatedAt); err != nil {
+			return nil, err
+		}
+		boards = append(boards, b)
+	}
+	return boards, rows.Err()
+}
+
+func (db *DB) DeleteBoard(id string) error {
+	_, err := db.conn.Exec(`DELETE FROM boards WHERE id = ?`, id)
+	return err
+}
+
+func (db *DB) GetBoard(id string) (model.Board, error) {
+	var b model.Board
+	err := db.conn.QueryRow(
+		`SELECT id, workspace_id, name, created_by, created_at FROM boards WHERE id = ?`, id,
+	).Scan(&b.ID, &b.WorkspaceID, &b.Name, &b.CreatedBy, &b.CreatedAt)
+	return b, err
+}
+
+// Board member methods
+
+func (db *DB) AddBoardMember(boardID, username string) error {
+	_, err := db.conn.Exec(
+		`INSERT INTO board_members (board_id, username) VALUES (?, ?)`,
+		boardID, username,
+	)
+	return err
+}
+
+func (db *DB) ListBoardMembers(boardID string) ([]model.BoardMember, error) {
+	rows, err := db.conn.Query(
+		`SELECT board_id, username, created_at FROM board_members WHERE board_id = ? ORDER BY created_at`,
+		boardID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var members []model.BoardMember
+	for rows.Next() {
+		var m model.BoardMember
+		if err := rows.Scan(&m.BoardID, &m.Username, &m.CreatedAt); err != nil {
+			return nil, err
+		}
+		members = append(members, m)
+	}
+	return members, rows.Err()
+}
+
+func (db *DB) IsBoardMember(boardID, username string) (bool, error) {
+	// Check explicit board_members grant
+	var count int
+	err := db.conn.QueryRow(
+		`SELECT COUNT(*) FROM board_members WHERE board_id = ? AND username = ?`,
+		boardID, username,
+	).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	if count > 0 {
+		return true, nil
+	}
+	// Owners/admins have implicit access to all boards in their workspace
+	var role string
+	err = db.conn.QueryRow(
+		`SELECT wm.role FROM workspace_members wm
+		 JOIN boards b ON b.workspace_id = wm.workspace_id
+		 WHERE b.id = ? AND wm.username = ?`,
+		boardID, username,
+	).Scan(&role)
+	if err != nil {
+		return false, nil
+	}
+	return role == "owner" || role == "admin", nil
+}
+
+func (db *DB) RemoveBoardMember(boardID, username string) error {
+	_, err := db.conn.Exec(
+		`DELETE FROM board_members WHERE board_id = ? AND username = ?`,
+		boardID, username,
+	)
+	return err
+}
+
+// Ticket methods
 
 func (db *DB) CreateTicket(t model.Ticket) error {
 	_, err := db.conn.Exec(
