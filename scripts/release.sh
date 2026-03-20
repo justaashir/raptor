@@ -6,9 +6,21 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 SERVER="${RAPTOR_SERVER:-https://raptor.raptorthree.com}"
 
-# Bump version: major, minor (default), or patch
-BUMP="${1:-minor}"
 CURRENT=$(cat "$ROOT_DIR/VERSION" | tr -d '[:space:]')
+
+# Prompt for bump type if not passed as argument
+if [ -n "$1" ]; then
+    BUMP="$1"
+else
+    printf "Current version: %s\n" "$CURRENT"
+    printf "Bump type — [p]atch / [m]inor / [M]ajor? "
+    read -r choice
+    case "$choice" in
+        p|patch) BUMP="patch" ;;
+        M|major) BUMP="major" ;;
+        *) BUMP="minor" ;;
+    esac
+fi
 MAJOR=$(echo "$CURRENT" | cut -d. -f1)
 MINOR=$(echo "$CURRENT" | cut -d. -f2)
 PATCH=$(echo "$CURRENT" | cut -d. -f3)
