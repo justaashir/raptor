@@ -18,7 +18,6 @@ func sampleTickets() []model.Ticket {
 
 func TestApp_NewApp_CreatesListAndDetailPanes(t *testing.T) {
 	app := NewApp("http://localhost:8080", "", "", "")
-
 	if app.listPane == nil {
 		t.Fatal("listPane should not be nil")
 	}
@@ -46,7 +45,6 @@ func TestApp_SetTickets_PopulatesListAndDetail(t *testing.T) {
 
 func TestApp_FocusedPane_DefaultIsList(t *testing.T) {
 	app := NewApp("http://localhost:8080", "", "", "")
-
 	if app.focused != focusList {
 		t.Fatalf("expected focusList, got %d", app.focused)
 	}
@@ -81,7 +79,6 @@ func TestApp_SelectedTicket_ReturnsFromList(t *testing.T) {
 
 func TestApp_SelectedTicket_NilWhenEmpty(t *testing.T) {
 	app := NewApp("http://localhost:8080", "", "", "")
-
 	if app.SelectedTicket() != nil {
 		t.Fatal("SelectedTicket should be nil when no tickets")
 	}
@@ -92,8 +89,7 @@ func TestApp_AllTickets_StoredForStatusBar(t *testing.T) {
 	app.width = 120
 	app.height = 40
 	app.initPanes()
-	tickets := sampleTickets()
-	app.SetTickets(tickets)
+	app.SetTickets(sampleTickets())
 
 	if len(app.tickets) != 4 {
 		t.Fatalf("expected 4 tickets stored, got %d", len(app.tickets))

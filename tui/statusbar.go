@@ -54,11 +54,11 @@ func RenderStatusBar(tickets []model.Ticket, boardName string, focus focusPane, 
 	// Right side: keybind hints
 	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	hints := []string{
+		hintStyle.Render("j/k") + " nav",
+		hintStyle.Render("/") + " filter",
 		hintStyle.Render("tab") + " focus",
-		hintStyle.Render("n") + " new",
-		hintStyle.Render("m") + " move",
-		hintStyle.Render("e") + " edit",
-		hintStyle.Render("x") + " delete",
+		hintStyle.Render("b") + " boards",
+		hintStyle.Render("r") + " refresh",
 		hintStyle.Render("q") + " quit",
 	}
 	right := strings.Join(hints, "  ")

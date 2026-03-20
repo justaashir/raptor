@@ -18,8 +18,6 @@ type viewState int
 
 const (
 	viewList viewState = iota
-	viewAdd
-	viewEdit
 	viewBoardSelect
 )
 
@@ -53,7 +51,7 @@ type boardsMsg struct {
 }
 
 func NewApp(serverURL, token, workspace, board string) *App {
-	app := &App{
+	return &App{
 		serverURL:  serverURL,
 		token:      token,
 		workspace:  workspace,
@@ -62,10 +60,8 @@ func NewApp(serverURL, token, workspace, board string) *App {
 		listPane:   NewListPane(40, 20),
 		detailPane: NewDetailPane(60, 20),
 	}
-	return app
 }
 
-// initPanes recalculates pane sizes based on current terminal dimensions.
 func (a *App) initPanes() {
 	listW, detailW, h := a.paneSizes()
 	a.listPane.SetSize(listW, h)
@@ -73,7 +69,7 @@ func (a *App) initPanes() {
 }
 
 func (a *App) paneSizes() (listW, detailW, contentH int) {
-	contentH = a.height - 2 // 1 for status bar, 1 for border
+	contentH = a.height - 2
 	if contentH < 5 {
 		contentH = 5
 	}
@@ -82,7 +78,7 @@ func (a *App) paneSizes() (listW, detailW, contentH int) {
 	if listW < 30 {
 		listW = 30
 	}
-	detailW = totalW - listW - 3 // 3 for borders/gap
+	detailW = totalW - listW - 3
 	if detailW < 20 {
 		detailW = 20
 	}
@@ -92,7 +88,6 @@ func (a *App) paneSizes() (listW, detailW, contentH int) {
 func (a *App) SetTickets(tickets []model.Ticket) {
 	a.tickets = tickets
 	a.listPane.SetTickets(tickets)
-	// Update detail pane with selected ticket
 	a.updateDetail()
 }
 
@@ -183,8 +178,7 @@ func (a *App) updateBoardSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// When the list is filtering (user typing in filter box),
-	// pass ALL keys to the list — don't intercept anything.
+	// When filtering, pass ALL keys to the list
 	if a.listPane.Filtering() {
 		prevCursor := a.listPane.Cursor()
 		cmd := a.listPane.Update(msg)
@@ -194,7 +188,6 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return a, cmd
 	}
 
-	// App-level actions (only when not filtering)
 	switch {
 	case key.Matches(msg, keys.Quit):
 		a.quitting = true
@@ -204,34 +197,14 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.toggleFocus()
 		return a, nil
 
-	case key.Matches(msg, keys.Move):
-		if t := a.SelectedTicket(); t != nil {
-			return a, a.cycleStatus(t)
-		}
-
-	case key.Matches(msg, keys.Delete):
-		if t := a.SelectedTicket(); t != nil {
-			return a, a.deleteTicket(t.ID)
-		}
-
 	case key.Matches(msg, keys.Refresh):
 		return a, a.fetchTickets
 
-	case key.Matches(msg, keys.New):
-		return a, a.addTicket
-
-	case key.Matches(msg, keys.Edit):
-		if t := a.SelectedTicket(); t != nil {
-			return a, a.editTicket(t)
-		}
-
 	case key.Matches(msg, keys.SwitchBoard):
-		if a.focused == focusList {
-			return a, a.fetchBoards
-		}
+		return a, a.fetchBoards
 
 	default:
-		// Delegate to focused pane — list handles j/k, /, pgup/pgdn etc.
+		// Delegate to focused pane — list handles j/k, /, pgup/pgdn
 		if a.focused == focusList {
 			prevCursor := a.listPane.Cursor()
 			cmd := a.listPane.Update(msg)
@@ -243,7 +216,6 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		cmd := a.detailPane.Update(msg)
 		return a, cmd
 	}
-	return a, nil
 }
 
 func (a *App) View() string {
@@ -255,7 +227,6 @@ func (a *App) View() string {
 		return a.viewBoardSelector()
 	}
 
-	// Split pane layout
 	listStyle := UnfocusedBorderStyle
 	detailStyle := UnfocusedBorderStyle
 	if a.focused == focusList {
@@ -277,7 +248,6 @@ func (a *App) View() string {
 		Render(a.detailPane.View())
 
 	panes := lipgloss.JoinHorizontal(lipgloss.Top, listView, detailView)
-
 	statusBar := RenderStatusBar(a.tickets, a.boardName, a.focused, a.width)
 
 	if a.err != nil {
@@ -330,7 +300,6 @@ func (a *App) fetchBoards() tea.Msg {
 		return errMsg(fmt.Errorf("no workspaces found"))
 	}
 
-	// Use configured workspace or first one
 	ws := workspaces[0]
 	if a.workspace != "" {
 		for _, w := range workspaces {
@@ -346,7 +315,6 @@ func (a *App) fetchBoards() tea.Msg {
 		return errMsg(err)
 	}
 
-	// If exactly one workspace and one board, auto-select
 	if len(workspaces) == 1 && len(boards) == 1 {
 		a.workspace = ws.ID
 		a.wsName = ws.Name
@@ -381,82 +349,12 @@ func (a *App) listenWS() tea.Msg {
 	}
 }
 
-func (a *App) cycleStatus(t *model.Ticket) tea.Cmd {
-	return func() tea.Msg {
-		next := map[model.Status]model.Status{
-			model.Todo:       model.InProgress,
-			model.InProgress: model.Done,
-			model.Done:       model.Todo,
-			model.Closed:     model.Todo,
-		}
-		newStatus := next[t.Status]
-		c := client.NewScoped(a.serverURL, a.token, a.workspace, a.board)
-		_, err := c.UpdateTicket(t.ID, map[string]any{"status": string(newStatus)})
-		if err != nil {
-			return errMsg(err)
-		}
-		return a.fetchTickets()
-	}
-}
-
-func (a *App) addTicket() tea.Msg {
-	title, content, err := NewAddForm()
-	if err != nil || title == "" {
-		return a.fetchTickets()
-	}
-	c := client.NewScoped(a.serverURL, a.token, a.workspace, a.board)
-	_, createErr := c.CreateTicket(title, content, "")
-	if createErr != nil {
-		return errMsg(createErr)
-	}
-	return a.fetchTickets()
-}
-
-func (a *App) editTicket(t *model.Ticket) tea.Cmd {
-	return func() tea.Msg {
-		title, content, err := NewEditForm(t.Title, t.Content)
-		if err != nil {
-			return a.fetchTickets()
-		}
-		fields := map[string]any{}
-		if title != t.Title {
-			fields["title"] = title
-		}
-		if content != t.Content {
-			fields["content"] = content
-		}
-		if len(fields) > 0 {
-			c := client.NewScoped(a.serverURL, a.token, a.workspace, a.board)
-			_, err := c.UpdateTicket(t.ID, fields)
-			if err != nil {
-				return errMsg(err)
-			}
-		}
-		return a.fetchTickets()
-	}
-}
-
-func (a *App) deleteTicket(id string) tea.Cmd {
-	return func() tea.Msg {
-		c := client.NewScoped(a.serverURL, a.token, a.workspace, a.board)
-		err := c.DeleteTicket(id)
-		if err != nil {
-			return errMsg(err)
-		}
-		return a.fetchTickets()
-	}
-}
-
 // Key bindings
 type keyMap struct {
 	Up          key.Binding
 	Down        key.Binding
 	Enter       key.Binding
-	Move        key.Binding
-	Delete      key.Binding
 	Refresh     key.Binding
-	New         key.Binding
-	Edit        key.Binding
 	Quit        key.Binding
 	Back        key.Binding
 	SwitchBoard key.Binding
@@ -467,11 +365,7 @@ var keys = keyMap{
 	Up:          key.NewBinding(key.WithKeys("up", "k")),
 	Down:        key.NewBinding(key.WithKeys("down", "j")),
 	Enter:       key.NewBinding(key.WithKeys("enter")),
-	Move:        key.NewBinding(key.WithKeys("m")),
-	Delete:      key.NewBinding(key.WithKeys("x")),
 	Refresh:     key.NewBinding(key.WithKeys("r")),
-	New:         key.NewBinding(key.WithKeys("n")),
-	Edit:        key.NewBinding(key.WithKeys("e")),
 	Quit:        key.NewBinding(key.WithKeys("q", "ctrl+c")),
 	Back:        key.NewBinding(key.WithKeys("esc")),
 	SwitchBoard: key.NewBinding(key.WithKeys("b")),
