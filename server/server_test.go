@@ -388,6 +388,41 @@ func TestServer_WorkspaceMembers(t *testing.T) {
 	}
 }
 
+func TestServer_WorkspaceInviteDuplicate(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{"alice", "bob"})
+	tokenAlice := GenerateToken("alice", "secret")
+
+	body := `{"name":"Team"}`
+	req := httptest.NewRequest("POST", "/api/workspaces/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenAlice)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	var ws struct{ ID string `json:"id"` }
+	json.NewDecoder(w.Body).Decode(&ws)
+
+	// First invite should succeed
+	body = `{"username":"bob","role":"member"}`
+	req = httptest.NewRequest("POST", "/api/workspaces/"+ws.ID+"/members", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenAlice)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Second invite should return 409 Conflict
+	req = httptest.NewRequest("POST", "/api/workspaces/"+ws.ID+"/members", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenAlice)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for duplicate invite, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestServer_BoardMembers(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice", "bob"})
 	tokenAlice := GenerateToken("alice", "secret")

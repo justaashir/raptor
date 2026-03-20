@@ -266,7 +266,11 @@ func (s *Server) handleWorkspaceMembers(w http.ResponseWriter, r *http.Request, 
 			return
 		}
 		if err := s.db.AddWorkspaceMember(wid, input.Username, input.Role); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			if errors.Is(err, ErrAlreadyMember) {
+				http.Error(w, `{"error":"user is already a member of this workspace"}`, http.StatusConflict)
+				return
+			}
+			http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

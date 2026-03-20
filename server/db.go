@@ -1,14 +1,18 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"raptor/model"
+	"strings"
 	"time"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
+
+var ErrAlreadyMember = errors.New("user is already a member of this workspace")
 
 type DB struct {
 	conn *gorm.DB
@@ -68,9 +72,17 @@ func (db *DB) CreateWorkspace(id, name, createdBy string) error {
 }
 
 func (db *DB) AddWorkspaceMember(workspaceID, username, role string) error {
-	return db.conn.Create(&model.WorkspaceMember{
+	err := db.conn.Create(&model.WorkspaceMember{
 		WorkspaceID: workspaceID, Username: username, Role: role,
 	}).Error
+	if err != nil && isDuplicateKeyError(err) {
+		return ErrAlreadyMember
+	}
+	return err
+}
+
+func isDuplicateKeyError(err error) bool {
+	return strings.Contains(err.Error(), "UNIQUE constraint failed")
 }
 
 func (db *DB) ListWorkspaceMembers(workspaceID string) ([]model.WorkspaceMember, error) {
