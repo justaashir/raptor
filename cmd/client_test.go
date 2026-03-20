@@ -117,3 +117,83 @@ func TestClient_AuthHeader(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestClient_ScopedURLs(t *testing.T) {
+	var gotPath string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		json.NewEncoder(w).Encode([]model.Ticket{})
+	}))
+	defer ts.Close()
+
+	// Without scope — uses old URL
+	c := NewClient(ts.URL, "")
+	c.ListTickets("", false)
+	if gotPath != "/api/tickets" {
+		t.Fatalf("expected /api/tickets, got %s", gotPath)
+	}
+
+	// With scope — uses workspace/board URL
+	c = NewScopedClient(ts.URL, "", "ws1", "bd1")
+	c.ListTickets("", false)
+	expected := "/api/workspaces/ws1/boards/bd1/tickets"
+	if gotPath != expected {
+		t.Fatalf("expected %s, got %s", expected, gotPath)
+	}
+}
+
+func TestClient_CreateWorkspace(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" || r.URL.Path != "/api/workspaces/" {
+			t.Fatalf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(model.Workspace{ID: "ws1", Name: "Team"})
+	}))
+	defer ts.Close()
+
+	c := NewClient(ts.URL, "")
+	ws, err := c.CreateWorkspace("Team")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ws.Name != "Team" {
+		t.Fatalf("expected Team, got %s", ws.Name)
+	}
+}
+
+func TestClient_ListWorkspaces(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode([]model.Workspace{{ID: "ws1", Name: "Team"}})
+	}))
+	defer ts.Close()
+
+	c := NewClient(ts.URL, "")
+	workspaces, err := c.ListWorkspaces()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(workspaces) != 1 {
+		t.Fatalf("expected 1 workspace, got %d", len(workspaces))
+	}
+}
+
+func TestClient_CreateBoard(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" || r.URL.Path != "/api/workspaces/ws1/boards" {
+			t.Fatalf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(model.Board{ID: "bd1", Name: "Sprint"})
+	}))
+	defer ts.Close()
+
+	c := NewClient(ts.URL, "")
+	bd, err := c.CreateBoard("ws1", "Sprint")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bd.Name != "Sprint" {
+		t.Fatalf("expected Sprint, got %s", bd.Name)
+	}
+}
