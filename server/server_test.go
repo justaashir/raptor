@@ -191,6 +191,128 @@ func TestServer_ListWorkspaces(t *testing.T) {
 	}
 }
 
+func TestServer_Authorization_MemberCantCreateBoard(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{"alice", "bob"})
+	tokenAlice := GenerateToken("alice", "secret")
+	tokenBob := GenerateToken("bob", "secret")
+
+	// alice creates workspace (becomes owner)
+	body := `{"name":"Team"}`
+	req := httptest.NewRequest("POST", "/api/workspaces/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenAlice)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	var ws struct{ ID string `json:"id"` }
+	json.NewDecoder(w.Body).Decode(&ws)
+
+	// Add bob as member
+	body = `{"username":"bob","role":"member"}`
+	req = httptest.NewRequest("POST", "/api/workspaces/"+ws.ID+"/members", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenAlice)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	// bob (member) tries to create board — should fail
+	body = `{"name":"Sprint"}`
+	req = httptest.NewRequest("POST", "/api/workspaces/"+ws.ID+"/boards", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenBob)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for member creating board, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestServer_BoardScopedTickets(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
+	token := GenerateToken("alice", "secret")
+
+	// Create workspace
+	body := `{"name":"Team"}`
+	req := httptest.NewRequest("POST", "/api/workspaces/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	var ws struct{ ID string `json:"id"` }
+	json.NewDecoder(w.Body).Decode(&ws)
+
+	// Create board
+	body = `{"name":"Sprint 1"}`
+	req = httptest.NewRequest("POST", "/api/workspaces/"+ws.ID+"/boards", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	var bd struct{ ID string `json:"id"` }
+	json.NewDecoder(w.Body).Decode(&bd)
+
+	// Create ticket on board
+	body = `{"title":"Task 1"}`
+	ticketURL := "/api/workspaces/" + ws.ID + "/boards/" + bd.ID + "/tickets"
+	req = httptest.NewRequest("POST", ticketURL, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// List tickets on board
+	req = httptest.NewRequest("GET", ticketURL, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	var tickets []model.Ticket
+	json.NewDecoder(w.Body).Decode(&tickets)
+	if len(tickets) != 1 {
+		t.Fatalf("expected 1 ticket, got %d", len(tickets))
+	}
+	if tickets[0].Title != "Task 1" {
+		t.Fatalf("expected Task 1, got %q", tickets[0].Title)
+	}
+	if tickets[0].BoardID != bd.ID {
+		t.Fatalf("expected board_id %q, got %q", bd.ID, tickets[0].BoardID)
+	}
+}
+
+func TestServer_Auth_ChecksWorkspaceMembership(t *testing.T) {
+	// Server with seed users — auth should work via workspace membership
+	db, err := NewDB(":memory:", "alice", "bob")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	hub := NewHub()
+	go hub.Run()
+	srv := NewServer(db, hub, WithSecret("secret"))
+
+	// alice should be able to auth (in default workspace)
+	body := `{"username":"alice"}`
+	req := httptest.NewRequest("POST", "/api/auth", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for alice, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// eve should not be able to auth (not in any workspace)
+	body = `{"username":"eve"}`
+	req = httptest.NewRequest("POST", "/api/auth", strings.NewReader(body))
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for eve, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestServer_CreatedByFromAuth(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
 	token := GenerateToken("alice", "secret")
