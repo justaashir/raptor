@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,27 +17,10 @@ var updateCmd = &cobra.Command{
 	Use:   "update",
 	Short: "Update raptor to the latest version",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Check latest version from GitHub
-		url := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", githubRepo)
-		resp, err := http.Get(url)
-		if err != nil {
-			return fmt.Errorf("failed to check version: %w", err)
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("failed to check latest release: %s", resp.Status)
-		}
-
-		var release struct {
-			TagName string `json:"tag_name"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-			return fmt.Errorf("failed to parse release: %w", err)
-		}
-
-		latest := release.TagName
-		if len(latest) > 0 && latest[0] == 'v' {
-			latest = latest[1:]
+		// Check latest version from server (same source as update notification)
+		latest := fetchServerVersion()
+		if latest == "" {
+			return fmt.Errorf("failed to check version from server (%s)", serverURL)
 		}
 
 		if latest == Version {
