@@ -17,28 +17,28 @@ import (
 type viewState int
 
 const (
-	viewBoard viewState = iota
-	viewDetail
+	viewList viewState = iota
 	viewAdd
 	viewEdit
 	viewBoardSelect
 )
 
 type App struct {
-	serverURL    string
-	token        string
-	workspace    string
-	board        string
-	boardName    string
-	wsName       string
-	columns      [3]*Column
-	activeCol    int
-	state        viewState
-	detailText   string
-	err          error
-	width        int
-	height       int
-	quitting     bool
+	serverURL  string
+	token      string
+	workspace  string
+	board      string
+	boardName  string
+	wsName     string
+	listPane   *ListPane
+	detailPane *DetailPane
+	focused    focusPane
+	tickets    []model.Ticket
+	state      viewState
+	err        error
+	width      int
+	height     int
+	quitting   bool
 	// Board selector state
 	boardChoices []model.Board
 	boardCursor  int
@@ -54,60 +54,65 @@ type boardsMsg struct {
 
 func NewApp(serverURL, token, workspace, board string) *App {
 	app := &App{
-		serverURL: serverURL,
-		token:     token,
-		workspace: workspace,
-		board:     board,
-		columns: [3]*Column{
-			NewColumn("Todo", model.Todo, nil),
-			NewColumn("In Progress", model.InProgress, nil),
-			NewColumn("Done", model.Done, nil),
-		},
+		serverURL:  serverURL,
+		token:      token,
+		workspace:  workspace,
+		board:      board,
+		focused:    focusList,
+		listPane:   NewListPane(40, 20),
+		detailPane: NewDetailPane(60, 20),
 	}
-	app.columns[0].SetFocused(true)
 	return app
 }
 
-func (a *App) ActiveColumn() int       { return a.activeCol }
-func (a *App) Columns() [3]*Column     { return a.columns }
+// initPanes recalculates pane sizes based on current terminal dimensions.
+func (a *App) initPanes() {
+	listW, detailW, h := a.paneSizes()
+	a.listPane.SetSize(listW, h)
+	a.detailPane.SetSize(detailW, h)
+}
+
+func (a *App) paneSizes() (listW, detailW, contentH int) {
+	contentH = a.height - 2 // 1 for status bar, 1 for border
+	if contentH < 5 {
+		contentH = 5
+	}
+	totalW := a.width
+	listW = totalW * 35 / 100
+	if listW < 30 {
+		listW = 30
+	}
+	detailW = totalW - listW - 3 // 3 for borders/gap
+	if detailW < 20 {
+		detailW = 20
+	}
+	return
+}
 
 func (a *App) SetTickets(tickets []model.Ticket) {
-	todo := filterByStatus(tickets, model.Todo)
-	inProgress := filterByStatus(tickets, model.InProgress)
-	done := filterByStatus(tickets, model.Done)
-	a.columns[0].SetTickets(todo)
-	a.columns[1].SetTickets(inProgress)
-	a.columns[2].SetTickets(done)
+	a.tickets = tickets
+	a.listPane.SetTickets(tickets)
+	// Update detail pane with selected ticket
+	a.updateDetail()
 }
 
-func (a *App) MoveRight() {
-	if a.activeCol < 2 {
-		a.columns[a.activeCol].SetFocused(false)
-		a.activeCol++
-		a.columns[a.activeCol].SetFocused(true)
-	}
-}
-
-func (a *App) MoveLeft() {
-	if a.activeCol > 0 {
-		a.columns[a.activeCol].SetFocused(false)
-		a.activeCol--
-		a.columns[a.activeCol].SetFocused(true)
-	}
+func (a *App) updateDetail() {
+	selected := a.listPane.SelectedTicket()
+	a.detailPane.SetTicket(selected)
 }
 
 func (a *App) SelectedTicket() *model.Ticket {
-	return a.columns[a.activeCol].SelectedTicket()
+	return a.listPane.SelectedTicket()
 }
 
-func filterByStatus(tickets []model.Ticket, status model.Status) []model.Ticket {
-	var result []model.Ticket
-	for _, t := range tickets {
-		if t.Status == status {
-			result = append(result, t)
-		}
+func (a *App) toggleFocus() {
+	if a.focused == focusList {
+		a.focused = focusDetail
+		a.listPane.Blur()
+	} else {
+		a.focused = focusList
+		a.listPane.Focus()
 	}
-	return result
 }
 
 // Bubble Tea interface
@@ -124,6 +129,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		a.width = msg.Width
 		a.height = msg.Height
+		a.initPanes()
 
 	case ticketsMsg:
 		a.SetTickets([]model.Ticket(msg))
@@ -145,10 +151,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch a.state {
 		case viewBoardSelect:
 			return a.updateBoardSelect(msg)
-		case viewDetail:
-			return a.updateDetail(msg)
 		default:
-			return a.updateBoard(msg)
+			return a.updateList(msg)
 		}
 	}
 	return a, nil
@@ -173,57 +177,59 @@ func (a *App) updateBoardSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.board = selected.ID
 			a.boardName = selected.Name
 			a.workspace = selected.WorkspaceID
-			a.state = viewBoard
+			a.state = viewList
 			return a, tea.Batch(a.fetchTickets, a.listenWS)
 		}
 	}
 	return a, nil
 }
 
-func (a *App) updateBoard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Quit):
 		a.quitting = true
 		return a, tea.Quit
-	case key.Matches(msg, keys.Left):
-		a.MoveLeft()
-	case key.Matches(msg, keys.Right):
-		a.MoveRight()
-	case key.Matches(msg, keys.Up):
-		a.columns[a.activeCol].MoveUp()
-	case key.Matches(msg, keys.Down):
-		a.columns[a.activeCol].MoveDown()
-	case key.Matches(msg, keys.Enter):
-		if t := a.SelectedTicket(); t != nil {
-			a.state = viewDetail
-			a.detailText = RenderTicketDetail(*t)
-		}
+
+	case key.Matches(msg, keys.Tab):
+		a.toggleFocus()
+		return a, nil
+
 	case key.Matches(msg, keys.Move):
 		if t := a.SelectedTicket(); t != nil {
 			return a, a.cycleStatus(t)
 		}
+
 	case key.Matches(msg, keys.Delete):
 		if t := a.SelectedTicket(); t != nil {
 			return a, a.deleteTicket(t.ID)
 		}
+
 	case key.Matches(msg, keys.Refresh):
 		return a, a.fetchTickets
+
 	case key.Matches(msg, keys.New):
 		return a, a.addTicket
+
 	case key.Matches(msg, keys.Edit):
 		if t := a.SelectedTicket(); t != nil {
 			return a, a.editTicket(t)
 		}
+
 	case key.Matches(msg, keys.SwitchBoard):
 		return a, a.fetchBoards
-	}
-	return a, nil
-}
 
-func (a *App) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch {
-	case key.Matches(msg, keys.Back), key.Matches(msg, keys.Quit):
-		a.state = viewBoard
+	default:
+		// Delegate to focused pane
+		if a.focused == focusList {
+			prevCursor := a.listPane.Cursor()
+			cmd := a.listPane.Update(msg)
+			if a.listPane.Cursor() != prevCursor {
+				a.updateDetail()
+			}
+			return a, cmd
+		}
+		cmd := a.detailPane.Update(msg)
+		return a, cmd
 	}
 	return a, nil
 }
@@ -237,33 +243,37 @@ func (a *App) View() string {
 		return a.viewBoardSelector()
 	}
 
-	if a.state == viewDetail {
-		return a.detailText + "\n\nPress Esc or q to go back"
+	// Split pane layout
+	listStyle := UnfocusedBorderStyle
+	detailStyle := UnfocusedBorderStyle
+	if a.focused == focusList {
+		listStyle = FocusedBorderStyle
+	} else {
+		detailStyle = FocusedBorderStyle
 	}
 
-	// Header with workspace > board
-	var header string
-	if a.wsName != "" || a.boardName != "" {
-		headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("14"))
-		header = headerStyle.Render(fmt.Sprintf("%s > %s", a.wsName, a.boardName)) + "\n\n"
-	}
+	listW, detailW, contentH := a.paneSizes()
 
-	var cols []string
-	for _, col := range a.columns {
-		cols = append(cols, col.View())
-	}
+	listView := listStyle.
+		Width(listW).
+		Height(contentH).
+		Render(a.listPane.View())
 
-	board := lipgloss.JoinHorizontal(lipgloss.Top, cols...)
+	detailView := detailStyle.
+		Width(detailW).
+		Height(contentH).
+		Render(a.detailPane.View())
 
-	help := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render(
-		"←/h ↑/k ↓/j →/l navigate • enter view • m move • d delete • n new • e edit • b boards • r refresh • q quit",
-	)
+	panes := lipgloss.JoinHorizontal(lipgloss.Top, listView, detailView)
+
+	statusBar := RenderStatusBar(a.tickets, a.boardName, a.focused, a.width)
 
 	if a.err != nil {
-		help = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Render(fmt.Sprintf("Error: %v", a.err))
+		errStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
+		statusBar = errStyle.Render(fmt.Sprintf("Error: %v", a.err))
 	}
 
-	return header + board + "\n\n" + help
+	return lipgloss.JoinVertical(lipgloss.Left, panes, statusBar)
 }
 
 func (a *App) viewBoardSelector() string {
@@ -330,7 +340,7 @@ func (a *App) fetchBoards() tea.Msg {
 		a.wsName = ws.Name
 		a.board = boards[0].ID
 		a.boardName = boards[0].Name
-		a.state = viewBoard
+		a.state = viewList
 		return a.fetchTickets()
 	}
 
@@ -440,6 +450,7 @@ type keyMap struct {
 	Quit        key.Binding
 	Back        key.Binding
 	SwitchBoard key.Binding
+	Tab         key.Binding
 }
 
 var keys = keyMap{
@@ -456,5 +467,5 @@ var keys = keyMap{
 	Quit:        key.NewBinding(key.WithKeys("q", "ctrl+c")),
 	Back:        key.NewBinding(key.WithKeys("esc")),
 	SwitchBoard: key.NewBinding(key.WithKeys("b")),
+	Tab:         key.NewBinding(key.WithKeys("tab")),
 }
-
