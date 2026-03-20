@@ -50,10 +50,14 @@ func renderTicketTable(tickets []model.Ticket) string {
 		t.Row(tk.ID, string(tk.Status), tk.Title, tk.Assignee)
 	}
 
+	rendered := t.Render()
+	tableWidth := lipgloss.Width(rendered)
+
 	title := lipgloss.NewStyle().Bold(true).Italic(true).
+		Width(tableWidth).Align(lipgloss.Center).
 		Render(fmt.Sprintf("Tickets (%d)", len(tickets)))
 
-	return fmt.Sprintf("        %s\n%s", title, t.Render())
+	return fmt.Sprintf("%s\n%s", title, rendered)
 }
 
 var listCmd = &cobra.Command{
