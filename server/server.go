@@ -39,9 +39,7 @@ func NewServer(db *DB, hub *Hub, opts ...Option) *Server {
 	s.mux.HandleFunc("/api/workspaces/", s.handleWorkspaces)
 	s.mux.HandleFunc("/api/version", s.handleVersion)
 	s.mux.HandleFunc("/api/auth", s.handleAuth)
-	s.mux.HandleFunc("/releases/", s.handleRelease)
 	s.mux.HandleFunc("/install.sh", s.handleInstallScript)
-	s.mux.HandleFunc("/admin/releases/", s.handleUploadRelease)
 	s.mux.HandleFunc("/ws", s.handleWS)
 	return s
 }

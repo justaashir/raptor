@@ -11,34 +11,46 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const githubRepo = "justaashir/raptor"
+
 var updateCmd = &cobra.Command{
 	Use:   "update",
 	Short: "Update raptor to the latest version",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Check latest version
-		resp, err := http.Get(serverURL + "/api/version")
+		// Check latest version from GitHub
+		url := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", githubRepo)
+		resp, err := http.Get(url)
 		if err != nil {
 			return fmt.Errorf("failed to check version: %w", err)
 		}
 		defer resp.Body.Close()
-
-		var info struct {
-			Version string `json:"version"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
-			return fmt.Errorf("failed to parse version: %w", err)
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("failed to check latest release: %s", resp.Status)
 		}
 
-		if info.Version == Version {
+		var release struct {
+			TagName string `json:"tag_name"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+			return fmt.Errorf("failed to parse release: %w", err)
+		}
+
+		latest := release.TagName
+		if len(latest) > 0 && latest[0] == 'v' {
+			latest = latest[1:]
+		}
+
+		if latest == Version {
 			fmt.Printf("Already up to date (%s)\n", Version)
 			return nil
 		}
 
-		fmt.Printf("Updating %s → %s...\n", Version, info.Version)
+		fmt.Printf("Updating %s → %s...\n", Version, latest)
 
-		// Download new binary
-		url := fmt.Sprintf("%s/releases/%s/%s", serverURL, runtime.GOOS, runtime.GOARCH)
-		dlResp, err := http.Get(url)
+		// Download binary from GitHub release
+		assetName := fmt.Sprintf("raptor-%s-%s", runtime.GOOS, runtime.GOARCH)
+		dlURL := fmt.Sprintf("https://github.com/%s/releases/latest/download/%s", githubRepo, assetName)
+		dlResp, err := http.Get(dlURL)
 		if err != nil {
 			return fmt.Errorf("failed to download: %w", err)
 		}
@@ -48,13 +60,11 @@ var updateCmd = &cobra.Command{
 			return fmt.Errorf("download failed: %s", dlResp.Status)
 		}
 
-		// Get current binary path
 		exe, err := os.Executable()
 		if err != nil {
 			return fmt.Errorf("failed to find executable path: %w", err)
 		}
 
-		// Write to temp file next to current binary
 		tmp, err := os.CreateTemp("", "raptor-update-*")
 		if err != nil {
 			return fmt.Errorf("failed to create temp file: %w", err)
@@ -71,12 +81,11 @@ var updateCmd = &cobra.Command{
 			return fmt.Errorf("failed to set permissions: %w", err)
 		}
 
-		// Replace current binary
 		if err := os.Rename(tmp.Name(), exe); err != nil {
 			return fmt.Errorf("failed to replace binary: %w", err)
 		}
 
-		fmt.Printf("Updated to %s\n", info.Version)
+		fmt.Printf("Updated to %s\n", latest)
 		return nil
 	},
 }

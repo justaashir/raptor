@@ -40,7 +40,7 @@ esac
 
 VERSION="${MAJOR}.${MINOR}.${PATCH}"
 
-echo "Releasing v${VERSION} → ${SERVER}"
+echo "Releasing v${VERSION}"
 
 # Cross-compile
 PLATFORMS="darwin/arm64 darwin/amd64 linux/amd64 linux/arm64"
@@ -55,25 +55,15 @@ for platform in $PLATFORMS; do
     GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=0 go build -ldflags "$LDFLAGS" -o "$DIST_DIR/raptor-${GOOS}-${GOARCH}" "$ROOT_DIR"
 done
 
-# Upload to Railway server (parallel)
-echo "Uploading all platforms..."
-for platform in $PLATFORMS; do
-    GOOS="${platform%/*}"
-    GOARCH="${platform#*/}"
-    curl -fsSL -X PUT --data-binary "@$DIST_DIR/raptor-${GOOS}-${GOARCH}" "${SERVER}/admin/releases/${GOOS}/${GOARCH}" &
-done
-wait
-echo "All uploads complete."
-
-# Everything succeeded — now commit the version bump
+# Bump version and deploy server
 echo "$VERSION" > "$ROOT_DIR/VERSION"
 railway variables set VERSION="$VERSION" 2>/dev/null || echo "Warning: could not set Railway VERSION (set manually)"
 
-# Deploy server to Railway
 echo "Deploying server..."
 cd "$ROOT_DIR"
 railway up --detach
 
+# Commit, tag, and create GitHub release with binaries
 cd "$ROOT_DIR"
 git add VERSION
 git commit -m "Release v${VERSION}" || true

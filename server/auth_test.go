@@ -65,7 +65,7 @@ func TestValidateToken_InvalidFormat(t *testing.T) {
 
 func TestAuthMiddleware_PublicRoutes(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
-	for _, path := range []string{"/api/version", "/api/auth", "/install.sh", "/releases/linux/amd64"} {
+	for _, path := range []string{"/api/version", "/api/auth", "/install.sh"} {
 		req := httptest.NewRequest("GET", path, nil)
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
