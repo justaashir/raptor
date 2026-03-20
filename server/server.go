@@ -70,6 +70,7 @@ func NewServer(db *DB, hub *Hub, opts ...Option) *Server {
 	// Boards
 	ws.GET("/:wid/boards", s.listBoards)
 	ws.POST("/:wid/boards", s.createBoard)
+	ws.GET("/:wid/boards/:bid", s.getBoard)
 	ws.PATCH("/:wid/boards/:bid", s.updateBoard)
 	ws.DELETE("/:wid/boards/:bid", s.deleteBoard)
 
@@ -263,6 +264,19 @@ func (s *Server) listBoards(c echo.Context) error {
 	return c.JSON(http.StatusOK, boards)
 }
 
+func (s *Server) getBoard(c echo.Context) error {
+	wid := c.Param("wid")
+	bid := c.Param("bid")
+	if err := s.authorize(c, wid, "member"); err != nil {
+		return jsonErr(c, http.StatusForbidden, err.Error())
+	}
+	board, err := s.db.GetBoard(bid)
+	if err != nil {
+		return jsonErr(c, http.StatusNotFound, "board not found")
+	}
+	return c.JSON(http.StatusOK, board)
+}
+
 func (s *Server) createBoard(c echo.Context) error {
 	wid := c.Param("wid")
 	if err := s.authorize(c, wid, "owner"); err != nil {
@@ -318,7 +332,10 @@ func (s *Server) updateBoard(c echo.Context) error {
 	if err := s.db.UpdateBoard(bid, fields); err != nil {
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
-	board, _ := s.db.GetBoard(bid)
+	board, err := s.db.GetBoard(bid)
+	if err != nil {
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
+	}
 	return c.JSON(http.StatusOK, board)
 }
 
@@ -405,6 +422,15 @@ func (s *Server) createTicket(c echo.Context) error {
 	}
 	ticket := model.NewTicket(input.Title, input.Content, u)
 	ticket.BoardID = bid
+	// Set default status to the board's first status
+	board, err := s.db.GetBoard(bid)
+	if err != nil {
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
+	}
+	statuses := board.StatusList()
+	if len(statuses) > 0 {
+		ticket.Status = model.Status(statuses[0])
+	}
 	if input.Assign != "" {
 		ticket.Assignee = input.Assign
 		ticket.AssignedBy = u

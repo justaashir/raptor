@@ -7,8 +7,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var boardStatuses string
-
 var boardCmd = &cobra.Command{
 	Use:   "board",
 	Short: "Manage boards",
@@ -24,11 +22,12 @@ var bdCreateCmd = &cobra.Command{
 			return fmt.Errorf("no workspace selected. Run 'raptor workspace use' first")
 		}
 		var statuses []string
-		if boardStatuses != "" {
-			for _, s := range strings.Split(boardStatuses, ",") {
-				s = strings.TrimSpace(s)
-				if s != "" {
-					statuses = append(statuses, s)
+		if cmd.Flags().Changed("statuses") {
+			s, _ := cmd.Flags().GetString("statuses")
+			for _, st := range strings.Split(s, ",") {
+				st = strings.TrimSpace(st)
+				if st != "" {
+					statuses = append(statuses, st)
 				}
 			}
 		}
@@ -41,7 +40,7 @@ var bdCreateCmd = &cobra.Command{
 			printJSON(bd)
 		} else {
 			fmt.Printf("Created board %s: %s\n", bd.ID, bd.Name)
-			if boardStatuses != "" {
+			if cmd.Flags().Changed("statuses") {
 				fmt.Printf("Statuses: %s\n", bd.Statuses)
 			}
 		}
@@ -150,7 +149,7 @@ var bdEditCmd = &cobra.Command{
 }
 
 func init() {
-	bdCreateCmd.Flags().StringVar(&boardStatuses, "statuses", "", "comma-separated statuses (default: todo,in_progress,done)")
+	bdCreateCmd.Flags().String("statuses", "", "comma-separated statuses (default: todo,in_progress,done)")
 	bdEditCmd.Flags().String("name", "", "new board name")
 	bdEditCmd.Flags().String("statuses", "", "comma-separated statuses")
 	boardCmd.AddCommand(bdCreateCmd, bdListCmd, bdUseCmd, bdEditCmd)

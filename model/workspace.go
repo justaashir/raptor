@@ -1,6 +1,9 @@
 package model
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 type Workspace struct {
 	ID        string    `json:"id" gorm:"primaryKey"`
@@ -30,7 +33,7 @@ func (b Board) StatusList() []string {
 		return DefaultStatuses
 	}
 	var result []string
-	for _, s := range splitStatuses(b.Statuses) {
+	for _, s := range strings.Split(b.Statuses, ",") {
 		if s != "" {
 			result = append(result, s)
 		}
@@ -48,19 +51,6 @@ func (b Board) ValidStatus(s string) bool {
 		}
 	}
 	return false
-}
-
-func splitStatuses(s string) []string {
-	var parts []string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == ',' {
-			parts = append(parts, s[start:i])
-			start = i + 1
-		}
-	}
-	parts = append(parts, s[start:])
-	return parts
 }
 
 func ValidRole(role string) bool {

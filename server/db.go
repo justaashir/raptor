@@ -18,7 +18,7 @@ type DB struct {
 	conn *gorm.DB
 }
 
-func NewDB(dsn string, seedUsers ...string) (*DB, error) {
+func NewDB(dsn string) (*DB, error) {
 	conn, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Warn),
 	})
@@ -42,7 +42,7 @@ func NewDB(dsn string, seedUsers ...string) (*DB, error) {
 		return nil, err
 	}
 
-	if err := seed(conn, seedUsers); err != nil {
+	if err := seed(conn); err != nil {
 		return nil, err
 	}
 

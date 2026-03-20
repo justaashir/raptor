@@ -396,6 +396,9 @@ func TestDB_SearchTickets_SQLWildcards(t *testing.T) {
 	if len(tickets) != 1 {
 		t.Fatalf("expected 1 result for literal '%%', got %d", len(tickets))
 	}
+	if tickets[0].Title != "100% done" {
+		t.Fatalf("expected '100%% done', got %q", tickets[0].Title)
+	}
 }
 
 func TestDB_SearchTickets_BoardScoped(t *testing.T) {
@@ -455,5 +458,8 @@ func TestDB_AssigneeField(t *testing.T) {
 	}
 	if got.Assignee != "bob" {
 		t.Fatalf("expected assignee %q, got %q", "bob", got.Assignee)
+	}
+	if got.CreatedBy != "alice" {
+		t.Fatalf("expected created_by %q, got %q", "alice", got.CreatedBy)
 	}
 }

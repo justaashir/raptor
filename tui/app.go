@@ -23,21 +23,21 @@ const (
 )
 
 type App struct {
-	serverURL string
-	token     string
-	workspace string
-	board     string
-	boardName string
-	wsName    string
-	statuses  []string
-	columns   []*Column
-	activeCol int
-	state     viewState
+	serverURL  string
+	token      string
+	workspace  string
+	board      string
+	boardName  string
+	wsName     string
+	statuses   []string
+	columns    []*Column
+	activeCol  int
+	state      viewState
 	detailText string
-	err       error
-	width     int
-	height    int
-	quitting  bool
+	err        error
+	width      int
+	height     int
+	quitting   bool
 	// Board selector state
 	boardChoices []model.Board
 	boardCursor  int
@@ -322,17 +322,11 @@ func (a *App) viewBoardSelector() string {
 
 func (a *App) fetchBoardInfo() tea.Msg {
 	c := client.New(a.serverURL, a.token)
-	boards, err := c.ListBoards(a.workspace)
+	b, err := c.GetBoard(a.workspace, a.board)
 	if err != nil {
-		return errMsg(err)
+		return boardInfoMsg{statuses: model.DefaultStatuses, name: ""}
 	}
-	for _, b := range boards {
-		if b.ID == a.board {
-			return boardInfoMsg{statuses: b.StatusList(), name: b.Name}
-		}
-	}
-	// Board not found, use defaults
-	return boardInfoMsg{statuses: model.DefaultStatuses, name: ""}
+	return boardInfoMsg{statuses: b.StatusList(), name: b.Name}
 }
 
 func (a *App) fetchTickets() tea.Msg {

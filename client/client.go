@@ -209,6 +209,15 @@ func (c *Client) CreateBoard(wid, name string, statuses []string) (model.Board, 
 	return bd, decode(resp, http.StatusCreated, &bd)
 }
 
+func (c *Client) GetBoard(wid, bid string) (model.Board, error) {
+	resp, err := c.r.R().Get("/api/workspaces/" + wid + "/boards/" + bid)
+	if err != nil {
+		return model.Board{}, err
+	}
+	var bd model.Board
+	return bd, decode(resp, http.StatusOK, &bd)
+}
+
 func (c *Client) ListBoards(wid string) ([]model.Board, error) {
 	resp, err := c.r.R().Get("/api/workspaces/" + wid + "/boards")
 	if err != nil {

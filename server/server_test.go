@@ -490,6 +490,9 @@ func TestServer_SearchTickets(t *testing.T) {
 	if len(tickets) != 1 {
 		t.Fatalf("expected 1 search result, got %d", len(tickets))
 	}
+	if tickets[0].Title != "Fix login bug" {
+		t.Fatalf("expected 'Fix login bug', got %q", tickets[0].Title)
+	}
 }
 
 func TestServer_PatchRejectsInvalidStatus(t *testing.T) {

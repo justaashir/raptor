@@ -8,7 +8,7 @@ type schemaVersion struct {
 	Version int `gorm:"not null"`
 }
 
-func seed(conn *gorm.DB, seedUsers []string) error {
+func seed(conn *gorm.DB) error {
 	var sv schemaVersion
 	if err := conn.First(&sv).Error; err == nil {
 		return nil // already seeded

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"hash/fnv"
 	"raptor/client"
 	"raptor/model"
 
@@ -37,12 +38,9 @@ func renderTicketTable(tickets []model.Ticket) string {
 			s := cellStyle
 			if col == 1 && row >= 0 && row < len(tickets) {
 				status := string(tickets[row].Status)
-				// Pick color from palette by hashing status string
-				idx := 0
-				for _, c := range status {
-					idx += int(c)
-				}
-				s = s.Foreground(statusPalette[idx%len(statusPalette)])
+				h := fnv.New32a()
+				h.Write([]byte(status))
+				s = s.Foreground(statusPalette[h.Sum32()%uint32(len(statusPalette))])
 			}
 			return s
 		})
