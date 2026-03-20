@@ -36,17 +36,13 @@ go test ./...              # Run all tests
 
 ### Releasing
 
-1. Bump version in `VERSION` file
-2. Update `VERSION` env var on Railway: `railway variables set VERSION=x.y.z`
-3. Run `scripts/release.sh` — reads version from `VERSION` file, cross-compiles, uploads to Railway + creates GitHub release
-4. Users get update prompt on next CLI invocation, run `raptor update` to self-update
-
 ```sh
-# Full release flow
-echo "0.2.0" > VERSION
-railway variables set VERSION=0.2.0
-scripts/release.sh
+scripts/release.sh           # bump minor: 0.1.0 → 0.2.0
+scripts/release.sh patch     # bump patch: 0.2.0 → 0.2.1
+scripts/release.sh major     # bump major: 0.2.1 → 1.0.0
 ```
+
+One command does everything: bumps VERSION file, sets Railway env, cross-compiles, uploads binaries, commits, tags, creates GitHub release.
 
 ### Testing
 
