@@ -33,6 +33,9 @@ var serveCmd = &cobra.Command{
 		}
 		defer db.Close()
 
+		if v := os.Getenv("VERSION"); v != "" {
+			Version = v
+		}
 		server.CurrentVersion = Version
 
 		hub := server.NewHub()
