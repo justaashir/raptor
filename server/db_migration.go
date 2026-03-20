@@ -12,8 +12,6 @@ type schemaVersion struct {
 }
 
 func seed(conn *gorm.DB, seedUsers []string) error {
-	conn.AutoMigrate(&schemaVersion{})
-
 	var sv schemaVersion
 	if err := conn.First(&sv).Error; err == nil {
 		return nil // already seeded
@@ -24,19 +22,26 @@ func seed(conn *gorm.DB, seedUsers []string) error {
 		bdID := uuid.New().String()[:8]
 		owner := seedUsers[0]
 
-		conn.Create(&model.Workspace{ID: wsID, Name: "Default", CreatedBy: owner})
-		conn.Create(&model.WorkspaceMember{WorkspaceID: wsID, Username: owner, Role: "owner"})
-
-		for _, u := range seedUsers[1:] {
-			conn.Create(&model.WorkspaceMember{WorkspaceID: wsID, Username: u, Role: "admin"})
+		if err := conn.Create(&model.Workspace{ID: wsID, Name: "Default", CreatedBy: owner}).Error; err != nil {
+			return err
+		}
+		if err := conn.Create(&model.WorkspaceMember{WorkspaceID: wsID, Username: owner, Role: "owner"}).Error; err != nil {
+			return err
 		}
 
-		conn.Create(&model.Board{ID: bdID, WorkspaceID: wsID, Name: "Default", CreatedBy: owner})
+		for _, u := range seedUsers[1:] {
+			if err := conn.Create(&model.WorkspaceMember{WorkspaceID: wsID, Username: u, Role: "admin"}).Error; err != nil {
+				return err
+			}
+		}
+
+		if err := conn.Create(&model.Board{ID: bdID, WorkspaceID: wsID, Name: "Default", CreatedBy: owner}).Error; err != nil {
+			return err
+		}
 
 		// Migrate existing tickets to default board
 		conn.Model(&model.Ticket{}).Where("board_id = ''").Update("board_id", bdID)
 	}
 
-	conn.Create(&schemaVersion{Version: 1})
-	return nil
+	return conn.Create(&schemaVersion{Version: 1}).Error
 }

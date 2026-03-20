@@ -16,14 +16,16 @@ type DB struct {
 
 func NewDB(dsn string, seedUsers ...string) (*DB, error) {
 	conn, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
-		Logger: logger.Discard,
+		Logger: logger.Default.LogMode(logger.Warn),
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	// Enable foreign keys
-	conn.Exec("PRAGMA foreign_keys = ON")
+	if err := conn.Exec("PRAGMA foreign_keys = ON").Error; err != nil {
+		return nil, err
+	}
 
 	// Auto-migrate all models
 	if err := conn.AutoMigrate(
@@ -32,6 +34,7 @@ func NewDB(dsn string, seedUsers ...string) (*DB, error) {
 		&model.WorkspaceMember{},
 		&model.Board{},
 		&model.BoardMember{},
+		&schemaVersion{},
 	); err != nil {
 		return nil, err
 	}
@@ -54,13 +57,14 @@ func (db *DB) Close() error {
 // Workspace methods
 
 func (db *DB) CreateWorkspace(id, name, createdBy string) error {
-	err := db.conn.Create(&model.Workspace{ID: id, Name: name, CreatedBy: createdBy}).Error
-	if err != nil {
-		return err
-	}
-	return db.conn.Create(&model.WorkspaceMember{
-		WorkspaceID: id, Username: createdBy, Role: "owner",
-	}).Error
+	return db.conn.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&model.Workspace{ID: id, Name: name, CreatedBy: createdBy}).Error; err != nil {
+			return err
+		}
+		return tx.Create(&model.WorkspaceMember{
+			WorkspaceID: id, Username: createdBy, Role: "owner",
+		}).Error
+	})
 }
 
 func (db *DB) AddWorkspaceMember(workspaceID, username, role string) error {
@@ -96,17 +100,27 @@ func (db *DB) RemoveWorkspaceMember(workspaceID, username string) error {
 }
 
 func (db *DB) DeleteWorkspace(id string) error {
-	// Delete cascade: members, boards, board_members, tickets
-	db.conn.Where("workspace_id = ?", id).Delete(&model.WorkspaceMember{})
-	// Get boards to cascade tickets and board_members
-	var boards []model.Board
-	db.conn.Where("workspace_id = ?", id).Find(&boards)
-	for _, b := range boards {
-		db.conn.Where("board_id = ?", b.ID).Delete(&model.BoardMember{})
-		db.conn.Where("board_id = ?", b.ID).Delete(&model.Ticket{})
-	}
-	db.conn.Where("workspace_id = ?", id).Delete(&model.Board{})
-	return db.conn.Delete(&model.Workspace{}, "id = ?", id).Error
+	return db.conn.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("workspace_id = ?", id).Delete(&model.WorkspaceMember{}).Error; err != nil {
+			return err
+		}
+		var boards []model.Board
+		if err := tx.Where("workspace_id = ?", id).Find(&boards).Error; err != nil {
+			return err
+		}
+		for _, b := range boards {
+			if err := tx.Where("board_id = ?", b.ID).Delete(&model.BoardMember{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Where("board_id = ?", b.ID).Delete(&model.Ticket{}).Error; err != nil {
+				return err
+			}
+		}
+		if err := tx.Where("workspace_id = ?", id).Delete(&model.Board{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&model.Workspace{}, "id = ?", id).Error
+	})
 }
 
 func (db *DB) IsWorkspaceMember(username string) (bool, error) {
@@ -151,9 +165,15 @@ func (db *DB) ListBoardsForUser(workspaceID, username string) ([]model.Board, er
 }
 
 func (db *DB) DeleteBoard(id string) error {
-	db.conn.Where("board_id = ?", id).Delete(&model.BoardMember{})
-	db.conn.Where("board_id = ?", id).Delete(&model.Ticket{})
-	return db.conn.Delete(&model.Board{}, "id = ?", id).Error
+	return db.conn.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("board_id = ?", id).Delete(&model.BoardMember{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("board_id = ?", id).Delete(&model.Ticket{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&model.Board{}, "id = ?", id).Error
+	})
 }
 
 func (db *DB) GetBoard(id string) (model.Board, error) {
