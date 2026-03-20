@@ -2,14 +2,15 @@ package server
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"raptor/model"
 	"strings"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 	"nhooyr.io/websocket"
 )
 
@@ -521,7 +522,7 @@ func (s *Server) handleBoardTicket(w http.ResponseWriter, r *http.Request, wid, 
 	switch r.Method {
 	case http.MethodGet:
 		ticket, err := s.db.GetTicket(tid)
-		if err == sql.ErrNoRows {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
