@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"raptor/model"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -458,6 +459,22 @@ func (s *Server) handleBoardTickets(w http.ResponseWriter, r *http.Request, wid,
 
 	switch r.Method {
 	case http.MethodGet:
+		// Server-side stats aggregation
+		if r.URL.Query().Get("stats") == "true" {
+			counts, err := s.db.TicketStats(bid)
+			if err != nil {
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+				return
+			}
+			total := 0
+			for _, c := range counts {
+				total += c
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{"total": total, "counts": counts})
+			return
+		}
+
 		status := r.URL.Query().Get("status")
 		mine := r.URL.Query().Get("mine")
 		all := r.URL.Query().Get("all")
@@ -550,8 +567,35 @@ func (s *Server) handleBoardTicket(w http.ResponseWriter, r *http.Request, wid, 
 	case http.MethodPatch:
 		var fields map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&fields); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
+		}
+		// Whitelist allowed fields to prevent mass assignment
+		allowed := map[string]bool{
+			"title": true, "content": true, "status": true,
+			"assignee": true, "close_reason": true,
+		}
+		for k := range fields {
+			if !allowed[k] {
+				delete(fields, k)
+			}
+		}
+		// Validate status if provided
+		if s, ok := fields["status"].(string); ok {
+			if !model.ValidStatus(model.Status(s)) {
+				http.Error(w, `{"error":"invalid status"}`, http.StatusBadRequest)
+				return
+			}
+			// Set closed_at server-side on status transitions
+			if model.Status(s) == model.Closed {
+				fields["closed_at"] = time.Now()
+			} else {
+				// Clear close fields when reopening
+				fields["closed_at"] = gorm.Expr("NULL")
+				if _, hasReason := fields["close_reason"]; !hasReason {
+					fields["close_reason"] = ""
+				}
+			}
 		}
 		if assignee, ok := fields["assignee"].(string); ok && assignee != "" {
 			isMember, _ := s.db.IsBoardMember(bid, assignee)

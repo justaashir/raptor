@@ -19,7 +19,6 @@ var reopenCmd = &cobra.Command{
 		ticket, err := c.UpdateTicket(args[0], map[string]any{
 			"status":       "todo",
 			"close_reason": "",
-			"closed_at":    nil,
 		})
 		if err != nil {
 			return err

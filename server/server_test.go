@@ -637,6 +637,146 @@ func TestServer_ListTickets_ExcludesClosedByDefault(t *testing.T) {
 	}
 }
 
+func TestServer_ReopenTicket(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
+	token := GenerateToken("alice", "secret")
+	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
+
+	// Create and close a ticket
+	body := `{"title":"Will reopen"}`
+	req := httptest.NewRequest("POST", ticketURL(wsID, bdID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	var created model.Ticket
+	json.NewDecoder(w.Body).Decode(&created)
+
+	// Close it
+	body = `{"status":"closed","close_reason":"temp close"}`
+	req = httptest.NewRequest("PATCH", ticketURL(wsID, bdID)+"/"+created.ID, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	var closed model.Ticket
+	json.NewDecoder(w.Body).Decode(&closed)
+	if closed.ClosedAt == nil {
+		t.Fatal("expected ClosedAt to be set after close")
+	}
+
+	// Reopen it
+	body = `{"status":"todo","close_reason":""}`
+	req = httptest.NewRequest("PATCH", ticketURL(wsID, bdID)+"/"+created.ID, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	var reopened model.Ticket
+	json.NewDecoder(w.Body).Decode(&reopened)
+	if reopened.Status != model.Todo {
+		t.Fatalf("expected status todo, got %q", reopened.Status)
+	}
+	if reopened.ClosedAt != nil {
+		t.Fatal("expected ClosedAt to be nil after reopen")
+	}
+	if reopened.CloseReason != "" {
+		t.Fatalf("expected empty close reason, got %q", reopened.CloseReason)
+	}
+}
+
+func TestServer_PatchRejectsInvalidStatus(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
+	token := GenerateToken("alice", "secret")
+	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
+
+	body := `{"title":"Test"}`
+	req := httptest.NewRequest("POST", ticketURL(wsID, bdID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	var created model.Ticket
+	json.NewDecoder(w.Body).Decode(&created)
+
+	body = `{"status":"banana"}`
+	req = httptest.NewRequest("PATCH", ticketURL(wsID, bdID)+"/"+created.ID, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid status, got %d", w.Code)
+	}
+}
+
+func TestServer_PatchStripsProtectedFields(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
+	token := GenerateToken("alice", "secret")
+	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
+
+	body := `{"title":"Test"}`
+	req := httptest.NewRequest("POST", ticketURL(wsID, bdID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	var created model.Ticket
+	json.NewDecoder(w.Body).Decode(&created)
+
+	// Try to overwrite protected fields
+	body = `{"id":"hacked","board_id":"other","created_by":"evil","title":"legit update"}`
+	req = httptest.NewRequest("PATCH", ticketURL(wsID, bdID)+"/"+created.ID, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var updated model.Ticket
+	json.NewDecoder(w.Body).Decode(&updated)
+	if updated.ID != created.ID {
+		t.Fatalf("ID should not have changed, got %q", updated.ID)
+	}
+	if updated.Title != "legit update" {
+		t.Fatalf("title should have been updated, got %q", updated.Title)
+	}
+}
+
+func TestServer_TicketStats(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
+	token := GenerateToken("alice", "secret")
+	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
+
+	for _, title := range []string{"Task 1", "Task 2"} {
+		body := fmt.Sprintf(`{"title":"%s"}`, title)
+		req := httptest.NewRequest("POST", ticketURL(wsID, bdID), strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, req)
+	}
+
+	req := httptest.NewRequest("GET", ticketURL(wsID, bdID)+"?stats=true", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var result map[string]any
+	json.NewDecoder(w.Body).Decode(&result)
+	total := result["total"].(float64)
+	if total != 2 {
+		t.Fatalf("expected total 2, got %v", total)
+	}
+	counts := result["counts"].(map[string]any)
+	if counts["todo"].(float64) != 2 {
+		t.Fatalf("expected 2 todo, got %v", counts["todo"])
+	}
+}
+
 func TestServer_ListMine(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice", "bob"})
 	tokenAlice := GenerateToken("alice", "secret")

@@ -25,13 +25,9 @@ var doctorCmd = &cobra.Command{
 			})
 			allOK = false
 		} else {
-			resp.Body.Close()
 			var info struct{ Version string `json:"version"` }
-			resp, _ = client.Get(serverURL + "/api/version")
-			if resp != nil {
-				json.NewDecoder(resp.Body).Decode(&info)
-				resp.Body.Close()
-			}
+			json.NewDecoder(resp.Body).Decode(&info)
+			resp.Body.Close()
 			detail := "reachable"
 			if info.Version != "" {
 				detail = fmt.Sprintf("reachable (v%s)", info.Version)

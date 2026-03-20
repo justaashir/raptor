@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"raptor/client"
-	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -20,8 +19,7 @@ var closeCmd = &cobra.Command{
 		}
 		c := client.NewScoped(serverURL, authToken, activeWS, activeBoard)
 		fields := map[string]any{
-			"status":    "closed",
-			"closed_at": time.Now(),
+			"status": "closed",
 		}
 		if closeReason != "" {
 			fields["close_reason"] = closeReason

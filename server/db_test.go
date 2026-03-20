@@ -4,6 +4,8 @@ import (
 	"raptor/model"
 	"testing"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 func TestDB_CreateAndGetTicket(t *testing.T) {
@@ -537,6 +539,110 @@ func TestDB_SearchTickets_ExcludesClosed(t *testing.T) {
 	tickets, _ := db.SearchTickets("", "login")
 	if len(tickets) != 1 {
 		t.Fatalf("expected 1 result (closed excluded), got %d", len(tickets))
+	}
+}
+
+func TestDB_ReopenTicket_ClearsClosedAt(t *testing.T) {
+	db := newTestDB(t)
+	ticket := model.NewTicket("Reopen me", "", "alice")
+	db.CreateTicket(ticket)
+
+	// Close it
+	now := time.Now()
+	db.UpdateTicket(ticket.ID, map[string]any{
+		"status":       "closed",
+		"close_reason": "done",
+		"closed_at":    now,
+	})
+	got, _ := db.GetTicket(ticket.ID)
+	if got.ClosedAt == nil {
+		t.Fatal("expected ClosedAt to be set after close")
+	}
+
+	// Reopen it using gorm.Expr("NULL") for closed_at
+	db.UpdateTicket(ticket.ID, map[string]any{
+		"status":       "todo",
+		"close_reason": "",
+		"closed_at":    gorm.Expr("NULL"),
+	})
+	got, _ = db.GetTicket(ticket.ID)
+	if got.Status != model.Todo {
+		t.Fatalf("expected status todo, got %q", got.Status)
+	}
+	if got.CloseReason != "" {
+		t.Fatalf("expected empty close reason, got %q", got.CloseReason)
+	}
+	if got.ClosedAt != nil {
+		t.Fatal("expected ClosedAt to be nil after reopen")
+	}
+}
+
+func TestDB_ListAllTickets(t *testing.T) {
+	db := newTestDB(t)
+	t1 := model.NewTicket("Open task", "", "alice")
+	db.CreateTicket(t1)
+	t2 := model.NewTicket("Closed task", "", "alice")
+	t2.Status = model.Closed
+	db.CreateTicket(t2)
+
+	tickets, err := db.ListAllTickets("")
+	if err != nil {
+		t.Fatalf("failed to list all: %v", err)
+	}
+	if len(tickets) != 2 {
+		t.Fatalf("expected 2 tickets, got %d", len(tickets))
+	}
+}
+
+func TestDB_SearchTickets_SQLWildcards(t *testing.T) {
+	db := newTestDB(t)
+	t1 := model.NewTicket("100% done", "", "alice")
+	db.CreateTicket(t1)
+	t2 := model.NewTicket("Regular task", "", "alice")
+	db.CreateTicket(t2)
+
+	// Searching for literal "%" should only match the ticket containing it
+	tickets, err := db.SearchTickets("", "%")
+	if err != nil {
+		t.Fatalf("failed to search: %v", err)
+	}
+	if len(tickets) != 1 {
+		t.Fatalf("expected 1 result for literal '%%', got %d", len(tickets))
+	}
+	if tickets[0].Title != "100% done" {
+		t.Fatalf("expected '100%% done', got %q", tickets[0].Title)
+	}
+}
+
+func TestDB_TicketStats(t *testing.T) {
+	db := newTestDB(t)
+	t1 := model.NewTicket("Task 1", "", "alice")
+	t1.BoardID = "b1"
+	db.CreateTicket(t1)
+	t2 := model.NewTicket("Task 2", "", "alice")
+	t2.BoardID = "b1"
+	t2.Status = model.InProgress
+	db.CreateTicket(t2)
+	t3 := model.NewTicket("Task 3", "", "alice")
+	t3.BoardID = "b1"
+	t3.Status = model.Closed
+	db.CreateTicket(t3)
+
+	counts, err := db.TicketStats("b1")
+	if err != nil {
+		t.Fatalf("failed to get stats: %v", err)
+	}
+	if counts["todo"] != 1 {
+		t.Fatalf("expected 1 todo, got %d", counts["todo"])
+	}
+	if counts["in_progress"] != 1 {
+		t.Fatalf("expected 1 in_progress, got %d", counts["in_progress"])
+	}
+	if counts["closed"] != 1 {
+		t.Fatalf("expected 1 closed, got %d", counts["closed"])
+	}
+	if counts["done"] != 0 {
+		t.Fatalf("expected 0 done, got %d", counts["done"])
 	}
 }
 

@@ -15,36 +15,23 @@ var statsCmd = &cobra.Command{
 			return err
 		}
 		c := client.NewScoped(serverURL, authToken, activeWS, activeBoard)
-		tickets, err := c.ListTickets("", false, true) // all=true to include closed
+		result, err := c.TicketStats()
 		if err != nil {
 			return err
 		}
 
-		counts := map[string]int{
-			"todo":        0,
-			"in_progress": 0,
-			"done":        0,
-			"closed":      0,
-		}
-		for _, t := range tickets {
-			counts[string(t.Status)]++
-		}
-		total := len(tickets)
-
 		if jsonOutput {
-			result := map[string]any{
-				"total":  total,
-				"counts": counts,
-			}
 			printJSON(result)
 			return nil
 		}
 
+		total := int(result["total"].(float64))
+		counts, _ := result["counts"].(map[string]any)
 		fmt.Printf("Total:       %d\n", total)
-		fmt.Printf("Todo:        %d\n", counts["todo"])
-		fmt.Printf("In Progress: %d\n", counts["in_progress"])
-		fmt.Printf("Done:        %d\n", counts["done"])
-		fmt.Printf("Closed:      %d\n", counts["closed"])
+		fmt.Printf("Todo:        %0.f\n", counts["todo"])
+		fmt.Printf("In Progress: %0.f\n", counts["in_progress"])
+		fmt.Printf("Done:        %0.f\n", counts["done"])
+		fmt.Printf("Closed:      %0.f\n", counts["closed"])
 		return nil
 	},
 }

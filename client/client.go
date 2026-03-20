@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"raptor/model"
 )
 
@@ -92,7 +93,7 @@ func (c *Client) ListTickets(status string, mine bool, all ...bool) ([]model.Tic
 }
 
 func (c *Client) SearchTickets(query string) ([]model.Ticket, error) {
-	req, _ := http.NewRequest("GET", c.ticketsURL()+"?q="+query, nil)
+	req, _ := http.NewRequest("GET", c.ticketsURL()+"?q="+url.QueryEscape(query), nil)
 	resp, err := c.do(req)
 	if err != nil {
 		return nil, err
@@ -101,6 +102,18 @@ func (c *Client) SearchTickets(query string) ([]model.Ticket, error) {
 	var tickets []model.Ticket
 	json.NewDecoder(resp.Body).Decode(&tickets)
 	return tickets, nil
+}
+
+func (c *Client) TicketStats() (map[string]any, error) {
+	req, _ := http.NewRequest("GET", c.ticketsURL()+"?stats=true", nil)
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var result map[string]any
+	json.NewDecoder(resp.Body).Decode(&result)
+	return result, nil
 }
 
 func (c *Client) GetTicket(id string) (model.Ticket, error) {
