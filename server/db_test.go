@@ -170,6 +170,27 @@ func TestDB_WorkspaceMembers(t *testing.T) {
 	}
 }
 
+func TestDB_AddWorkspaceMember_Duplicate(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateWorkspace("ws1", "Team", "alice")
+
+	err := db.AddWorkspaceMember("ws1", "bob", "member")
+	if err != nil {
+		t.Fatalf("first add should succeed: %v", err)
+	}
+
+	err = db.AddWorkspaceMember("ws1", "bob", "admin")
+	if err != ErrAlreadyMember {
+		t.Fatalf("expected ErrAlreadyMember, got %v", err)
+	}
+
+	// Verify bob's role didn't change
+	role, _ := db.GetMemberRole("ws1", "bob")
+	if role != "member" {
+		t.Fatalf("expected role to remain member, got %q", role)
+	}
+}
+
 func TestDB_UpdateMemberRole(t *testing.T) {
 	db := newTestDB(t)
 	db.CreateWorkspace("ws1", "Team", "alice")

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"raptor/model"
 	"time"
@@ -9,6 +10,8 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
+
+var ErrAlreadyMember = errors.New("user is already a member of this workspace")
 
 type DB struct {
 	conn *gorm.DB
@@ -68,6 +71,13 @@ func (db *DB) CreateWorkspace(id, name, createdBy string) error {
 }
 
 func (db *DB) AddWorkspaceMember(workspaceID, username, role string) error {
+	var count int64
+	db.conn.Model(&model.WorkspaceMember{}).
+		Where("workspace_id = ? AND username = ?", workspaceID, username).
+		Count(&count)
+	if count > 0 {
+		return ErrAlreadyMember
+	}
 	return db.conn.Create(&model.WorkspaceMember{
 		WorkspaceID: workspaceID, Username: username, Role: role,
 	}).Error

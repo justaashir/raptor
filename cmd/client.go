@@ -195,6 +195,9 @@ func (c *Client) InviteWorkspaceMember(wid, username, role string) error {
 		return err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusConflict {
+		return fmt.Errorf("%s is already a member of this workspace", username)
+	}
 	if resp.StatusCode != http.StatusCreated {
 		msg, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("unexpected status: %d: %s", resp.StatusCode, msg)
