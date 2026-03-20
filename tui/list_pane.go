@@ -69,28 +69,36 @@ func (d ticketDelegate) Render(w io.Writer, m list.Model, index int, listItem li
 	}
 	title := truncate(t.Title, titleW)
 
+	star := StatusStar(t.Status)
+	statusColor := StatusColor(t.Status)
+
 	if index == m.Index() {
-		// Selected row — Dracula current line highlight
+		// Selected row — bright highlight
 		row := lipgloss.NewStyle().
-			Background(draculaLine).
-			Foreground(draculaFg).
+			Background(colorLine).
+			Foreground(colorFg).
 			Bold(true).
 			Width(d.width).
-			Render(fmt.Sprintf("%s %s%s%s%s%s",
-				icon, status, id, assignee, age, title))
+			Render(fmt.Sprintf("%s %s %s%s%s%s%s",
+				icon, star, status, id, assignee, age, title))
 		fmt.Fprint(w, row)
 		return
 	}
 
-	// Normal row — each column styled
-	statusColor := StatusColor(t.Status)
-	fmt.Fprintf(w, "%s %s%s%s%s%s",
+	// Normal row — each column styled, bold title for open tickets
+	titleRendered := lipgloss.NewStyle().Foreground(colorFg).Render(title)
+	if t.Status == model.Todo || t.Status == model.InProgress {
+		titleRendered = lipgloss.NewStyle().Foreground(colorFg).Bold(true).Render(title)
+	}
+
+	fmt.Fprintf(w, "%s %s %s%s%s%s%s",
 		icon,
+		star,
 		lipgloss.NewStyle().Foreground(statusColor).Render(status),
-		lipgloss.NewStyle().Foreground(draculaCyan).Render(id),
-		lipgloss.NewStyle().Foreground(draculaPurple).Render(assignee),
-		lipgloss.NewStyle().Foreground(draculaComment).Render(age),
-		lipgloss.NewStyle().Foreground(draculaFg).Render(title),
+		lipgloss.NewStyle().Foreground(colorComment).Render(id),
+		lipgloss.NewStyle().Foreground(colorPurple).Render(assignee),
+		lipgloss.NewStyle().Foreground(colorComment).Render(age),
+		titleRendered,
 	)
 }
 
@@ -229,9 +237,12 @@ func (lp *ListPane) Update(msg tea.Msg) tea.Cmd {
 	return cmd
 }
 
-// View renders the list.
+// View renders the column header + list.
 func (lp *ListPane) View() string {
-	return lp.list.View()
+	header := ColumnHeaderStyle.Width(lp.width).Render(
+		fmt.Sprintf("   %-8s %-10s %-12s %-6s %s",
+			"STATUS", "ID", "ASSIGNEE", "AGE", "TITLE"))
+	return header + "\n" + lp.list.View()
 }
 
 // SetSize updates the pane dimensions.
@@ -239,6 +250,6 @@ func (lp *ListPane) SetSize(width, height int) {
 	lp.width = width
 	lp.height = height
 	lp.list.SetWidth(width)
-	lp.list.SetHeight(height)
+	lp.list.SetHeight(height - 1) // -1 for column header
 	lp.list.SetDelegate(ticketDelegate{width: width})
 }

@@ -74,31 +74,29 @@ func RenderDetailContent(t *model.Ticket, width int, renderer ...*glamour.TermRe
 		"%s  %s %s  %s %s",
 		statusBadge,
 		DetailMetaKeyStyle.Render("ID"),
-		lipgloss.NewStyle().Foreground(draculaCyan).Render(t.ID),
+		lipgloss.NewStyle().Foreground(colorCyan).Render(t.ID),
 		DetailMetaKeyStyle.Render("Age"),
-		lipgloss.NewStyle().Foreground(draculaYellow).Render(FormatAge(t.CreatedAt)),
+		lipgloss.NewStyle().Foreground(colorYellow).Render(FormatAge(t.CreatedAt)),
 	)
 
 	if t.Assignee != "" {
 		metaLines += fmt.Sprintf("  %s %s",
 			DetailMetaKeyStyle.Render("Assignee"),
-			lipgloss.NewStyle().Foreground(draculaPurple).Render("@"+t.Assignee),
+			lipgloss.NewStyle().Foreground(colorPurple).Render("@"+t.Assignee),
 		)
 	}
 
 	if t.CreatedBy != "" {
 		metaLines += fmt.Sprintf("  %s %s",
 			DetailMetaKeyStyle.Render("By"),
-			lipgloss.NewStyle().Foreground(draculaOrange).Render(t.CreatedBy),
+			lipgloss.NewStyle().Foreground(colorOrange).Render(t.CreatedBy),
 		)
 	}
 
 	dates := fmt.Sprintf(
-		"%s %s  %s %s",
-		DetailMetaKeyStyle.Render("Created"),
-		lipgloss.NewStyle().Foreground(draculaComment).Render(t.CreatedAt.Format("2006-01-02 15:04")),
+		"%s %s",
 		DetailMetaKeyStyle.Render("Updated"),
-		lipgloss.NewStyle().Foreground(draculaComment).Render(t.UpdatedAt.Format("2006-01-02 15:04")),
+		lipgloss.NewStyle().Foreground(colorComment).Render(t.UpdatedAt.Format("2006-01-02 15:04")),
 	)
 
 	var body string

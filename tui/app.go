@@ -230,9 +230,9 @@ func (a *App) View() string {
 	// Header
 	var header string
 	if a.wsName != "" || a.boardName != "" {
-		ws := lipgloss.NewStyle().Foreground(draculaComment).Render(a.wsName)
-		sep := lipgloss.NewStyle().Foreground(draculaComment).Render(" > ")
-		board := lipgloss.NewStyle().Bold(true).Foreground(draculaPink).Render(a.boardName)
+		ws := lipgloss.NewStyle().Foreground(colorComment).Render(a.wsName)
+		sep := lipgloss.NewStyle().Foreground(colorComment).Render(" > ")
+		board := lipgloss.NewStyle().Bold(true).Foreground(colorPink).Render(a.boardName)
 		header = lipgloss.NewStyle().Padding(0, 1).Render(ws+sep+board) + "\n"
 	}
 

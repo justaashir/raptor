@@ -7,43 +7,22 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-func TestStatusColor_ReturnsOrangeForTodo(t *testing.T) {
-	got := StatusColor(model.Todo)
-	want := lipgloss.Color("#ffb86c")
-	if got != want {
-		t.Fatalf("StatusColor(Todo) = %v, want %v", got, want)
+func TestStatusColor_ReturnsCorrectColors(t *testing.T) {
+	tests := []struct {
+		status model.Status
+		want   lipgloss.Color
+	}{
+		{model.Todo, colorOrange},
+		{model.InProgress, colorCyan},
+		{model.Done, colorGreen},
+		{model.Closed, colorRed},
+		{model.Status("unknown"), colorComment},
 	}
-}
-
-func TestStatusColor_ReturnsCyanForInProgress(t *testing.T) {
-	got := StatusColor(model.InProgress)
-	want := lipgloss.Color("#8be9fd")
-	if got != want {
-		t.Fatalf("StatusColor(InProgress) = %v, want %v", got, want)
-	}
-}
-
-func TestStatusColor_ReturnsGreenForDone(t *testing.T) {
-	got := StatusColor(model.Done)
-	want := lipgloss.Color("#50fa7b")
-	if got != want {
-		t.Fatalf("StatusColor(Done) = %v, want %v", got, want)
-	}
-}
-
-func TestStatusColor_ReturnsRedForClosed(t *testing.T) {
-	got := StatusColor(model.Closed)
-	want := lipgloss.Color("#ff5555")
-	if got != want {
-		t.Fatalf("StatusColor(Closed) = %v, want %v", got, want)
-	}
-}
-
-func TestStatusColor_ReturnsCommentForUnknown(t *testing.T) {
-	got := StatusColor(model.Status("unknown"))
-	want := lipgloss.Color("#6272a4")
-	if got != want {
-		t.Fatalf("StatusColor(unknown) = %v, want %v", got, want)
+	for _, tt := range tests {
+		got := StatusColor(tt.status)
+		if got != tt.want {
+			t.Errorf("StatusColor(%s) = %v, want %v", tt.status, got, tt.want)
+		}
 	}
 }
 
@@ -53,7 +32,7 @@ func TestStatusIcon_ReturnsCorrectIcons(t *testing.T) {
 		icon   string
 	}{
 		{model.Todo, "📋"},
-		{model.InProgress, "🔧"},
+		{model.InProgress, "⚡"},
 		{model.Done, "✅"},
 		{model.Closed, "🔒"},
 	}

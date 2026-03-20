@@ -6,34 +6,36 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Dracula palette
+// Vibrant palette (Dracula-inspired but more lively)
 var (
-	draculaBg      = lipgloss.Color("#282a36")
-	draculaLine    = lipgloss.Color("#44475a")
-	draculaFg      = lipgloss.Color("#f8f8f2")
-	draculaComment = lipgloss.Color("#6272a4")
-	draculaCyan    = lipgloss.Color("#8be9fd")
-	draculaGreen   = lipgloss.Color("#50fa7b")
-	draculaOrange  = lipgloss.Color("#ffb86c")
-	draculaPink    = lipgloss.Color("#ff79c6")
-	draculaPurple  = lipgloss.Color("#bd93f9")
-	draculaRed     = lipgloss.Color("#ff5555")
-	draculaYellow  = lipgloss.Color("#f1fa8c")
+	colorBg        = lipgloss.Color("#282a36")
+	colorLine      = lipgloss.Color("#44475a")
+	colorFg        = lipgloss.Color("#f8f8f2")
+	colorComment   = lipgloss.Color("#6272a4")
+	colorCyan      = lipgloss.Color("#8be9fd")
+	colorGreen     = lipgloss.Color("#50fa7b")
+	colorOrange    = lipgloss.Color("#ffb86c")
+	colorPink      = lipgloss.Color("#ff79c6")
+	colorPurple    = lipgloss.Color("#bd93f9")
+	colorRed       = lipgloss.Color("#ff5555")
+	colorYellow    = lipgloss.Color("#f1fa8c")
+	colorBrightPurple = lipgloss.Color("#d6acff")
+	colorGold      = lipgloss.Color("#ffd700")
 )
 
-// Status colors — Dracula
+// StatusColor returns a color for each status.
 func StatusColor(s model.Status) lipgloss.Color {
 	switch s {
 	case model.Todo:
-		return draculaOrange
+		return colorOrange
 	case model.InProgress:
-		return draculaCyan
+		return colorCyan
 	case model.Done:
-		return draculaGreen
+		return colorGreen
 	case model.Closed:
-		return draculaRed
+		return colorRed
 	default:
-		return draculaComment
+		return colorComment
 	}
 }
 
@@ -43,7 +45,7 @@ func StatusIcon(s model.Status) string {
 	case model.Todo:
 		return "📋"
 	case model.InProgress:
-		return "🔧"
+		return "⚡"
 	case model.Done:
 		return "✅"
 	case model.Closed:
@@ -53,29 +55,46 @@ func StatusIcon(s model.Status) string {
 	}
 }
 
-// Pane styles — Dracula
+// StatusStar returns a star emoji for open tickets.
+func StatusStar(s model.Status) string {
+	switch s {
+	case model.Todo, model.InProgress:
+		return "⭐"
+	default:
+		return "  "
+	}
+}
+
+// Pane styles
 var (
 	FocusedBorderStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
-				BorderForeground(draculaPurple)
+				BorderForeground(colorPurple)
 
 	UnfocusedBorderStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
-				BorderForeground(draculaComment)
+				BorderForeground(colorComment)
+
+	// Column header bar (purple background like beads_viewer)
+	ColumnHeaderStyle = lipgloss.NewStyle().
+				Background(colorPurple).
+				Foreground(colorBg).
+				Bold(true).
+				Padding(0, 1)
 
 	StatusBarStyle = lipgloss.NewStyle().
-			Background(draculaLine).
-			Foreground(draculaFg).
+			Background(colorLine).
+			Foreground(colorFg).
 			Padding(0, 1)
 
 	DetailTitleStyle = lipgloss.NewStyle().
 				Bold(true).
-				Foreground(draculaPink)
+				Foreground(colorPink)
 
 	DetailMetaKeyStyle = lipgloss.NewStyle().
-				Foreground(draculaComment).
+				Foreground(colorPurple).
 				Bold(true)
 
 	DetailMetaValueStyle = lipgloss.NewStyle().
-				Foreground(draculaFg)
+				Foreground(colorFg)
 )

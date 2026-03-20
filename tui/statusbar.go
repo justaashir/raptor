@@ -31,7 +31,7 @@ func RenderStatusBar(tickets []model.Ticket, boardName string, focus focusPane, 
 
 	// Filter badge
 	filterBadge := lipgloss.NewStyle().
-		Background(draculaPurple).
+		Background(colorPurple).
 		Foreground(lipgloss.Color("#282a36")).
 		Bold(true).
 		Padding(0, 1).
@@ -40,7 +40,7 @@ func RenderStatusBar(tickets []model.Ticket, boardName string, focus focusPane, 
 	// Ticket counts with emojis
 	left := fmt.Sprintf("%s  %s  %d tickets  %s %s %s %s",
 		filterBadge,
-		lipgloss.NewStyle().Foreground(draculaPink).Bold(true).Render(boardName),
+		lipgloss.NewStyle().Foreground(colorPink).Bold(true).Render(boardName),
 		len(tickets),
 		lipgloss.NewStyle().Foreground(StatusColor(model.Todo)).Render(
 			fmt.Sprintf("📋%d", counts[model.Todo])),
@@ -53,9 +53,9 @@ func RenderStatusBar(tickets []model.Ticket, boardName string, focus focusPane, 
 	)
 
 	// Right side: keybind hints with separators
-	keyStyle := lipgloss.NewStyle().Foreground(draculaCyan).Bold(true)
-	descStyle := lipgloss.NewStyle().Foreground(draculaComment)
-	sep := lipgloss.NewStyle().Foreground(draculaComment).Render(" │ ")
+	keyStyle := lipgloss.NewStyle().Foreground(colorCyan).Bold(true)
+	descStyle := lipgloss.NewStyle().Foreground(colorComment)
+	sep := lipgloss.NewStyle().Foreground(colorComment).Render(" │ ")
 
 	hints := []string{
 		fmt.Sprintf("%s %s", keyStyle.Render("j/k"), descStyle.Render("nav")),
@@ -69,7 +69,7 @@ func RenderStatusBar(tickets []model.Ticket, boardName string, focus focusPane, 
 
 	// Compose full bar
 	barStyle := lipgloss.NewStyle().
-		Background(draculaLine).
+		Background(colorLine).
 		Width(width)
 
 	leftW := lipgloss.Width(left)
