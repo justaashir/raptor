@@ -3,7 +3,9 @@ package cmd
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"raptor/server"
+	"strconv"
 
 	"github.com/spf13/cobra"
 )
@@ -14,11 +16,24 @@ var serveCmd = &cobra.Command{
 	Use:   "serve",
 	Short: "Start the raptor server",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		db, err := server.NewDB("raptor.db")
+		dbPath := "raptor.db"
+		if v := os.Getenv("DATABASE_PATH"); v != "" {
+			dbPath = v
+		}
+
+		if v := os.Getenv("PORT"); v != "" {
+			if p, err := strconv.Atoi(v); err == nil {
+				servePort = p
+			}
+		}
+
+		db, err := server.NewDB(dbPath)
 		if err != nil {
 			return fmt.Errorf("failed to open database: %w", err)
 		}
 		defer db.Close()
+
+		server.CurrentVersion = Version
 
 		hub := server.NewHub()
 		go hub.Run()

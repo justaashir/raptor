@@ -21,6 +21,10 @@ func NewServer(db *DB, hub *Hub) *Server {
 	s := &Server{db: db, hub: hub, mux: http.NewServeMux()}
 	s.mux.HandleFunc("/api/tickets", s.handleTickets)
 	s.mux.HandleFunc("/api/tickets/", s.handleTicket)
+	s.mux.HandleFunc("/api/version", s.handleVersion)
+	s.mux.HandleFunc("/releases/", s.handleRelease)
+	s.mux.HandleFunc("/install.sh", s.handleInstallScript)
+	s.mux.HandleFunc("/admin/releases/", s.handleUploadRelease)
 	s.mux.HandleFunc("/ws", s.handleWS)
 	return s
 }
