@@ -58,7 +58,7 @@ func RenderStatusBar(tickets []model.Ticket, boardName string, focus focusPane, 
 		hintStyle.Render("n") + " new",
 		hintStyle.Render("m") + " move",
 		hintStyle.Render("e") + " edit",
-		hintStyle.Render("d") + " delete",
+		hintStyle.Render("x") + " delete",
 		hintStyle.Render("q") + " quit",
 	}
 	right := strings.Join(hints, "  ")

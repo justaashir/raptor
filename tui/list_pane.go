@@ -1,10 +1,11 @@
 package tui
 
 import (
+	"fmt"
+	"io"
 	"raptor/model"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -25,9 +26,79 @@ func FormatStatus(s model.Status) string {
 	}
 }
 
-// ListPane wraps a bubbles/table for displaying tickets.
+// TicketItem wraps a model.Ticket to implement list.Item and list.DefaultItem.
+type TicketItem struct {
+	ticket model.Ticket
+}
+
+func (i TicketItem) FilterValue() string { return i.ticket.Title }
+func (i TicketItem) Title() string       { return i.ticket.Title }
+func (i TicketItem) Description() string { return i.ticket.ID }
+
+// ticketDelegate renders each ticket as a single-line row with columns.
+type ticketDelegate struct {
+	width int
+}
+
+func (d ticketDelegate) Height() int                               { return 1 }
+func (d ticketDelegate) Spacing() int                              { return 0 }
+func (d ticketDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd   { return nil }
+func (d ticketDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
+	ti, ok := listItem.(TicketItem)
+	if !ok {
+		return
+	}
+	t := ti.ticket
+
+	status := FormatStatus(t.Status)
+	statusStyle := lipgloss.NewStyle().
+		Foreground(StatusColor(t.Status)).
+		Width(7)
+
+	idStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("240")).
+		Width(9)
+
+	assignee := "--"
+	if t.Assignee != "" {
+		assignee = "@" + t.Assignee
+	}
+	assigneeStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("176")).
+		Width(9)
+
+	ageStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("245")).
+		Width(5)
+
+	titleStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("252"))
+
+	row := fmt.Sprintf("%s %s %s %s %s",
+		statusStyle.Render(status),
+		idStyle.Render(t.ID),
+		assigneeStyle.Render(assignee),
+		ageStyle.Render(FormatAge(t.CreatedAt)),
+		titleStyle.Render(t.Title),
+	)
+
+	if index == m.Index() {
+		row = lipgloss.NewStyle().
+			Background(lipgloss.Color("62")).
+			Foreground(lipgloss.Color("229")).
+			Bold(true).
+			Width(d.width).
+			Render(fmt.Sprintf(" %s  %s  %s  %s  %s",
+				status, t.ID, assignee, FormatAge(t.CreatedAt), t.Title,
+			))
+	}
+
+	fmt.Fprint(w, row)
+}
+
+// ListPane wraps a bubbles/list for displaying tickets.
 type ListPane struct {
-	table   table.Model
+	list    list.Model
 	tickets []model.Ticket
 	width   int
 	height  int
@@ -35,65 +106,24 @@ type ListPane struct {
 
 // NewListPane creates a new list pane with the given dimensions.
 func NewListPane(width, height int) *ListPane {
-	cols := listColumns(width)
+	delegate := ticketDelegate{width: width}
+	l := list.New([]list.Item{}, delegate, width, height)
+	l.Title = "Tickets"
+	l.SetShowTitle(false)
+	l.SetShowStatusBar(false)
+	l.SetShowHelp(false)
+	l.SetFilteringEnabled(true)
+	l.SetShowFilter(true)
+	l.SetShowPagination(true)
+	l.SetStatusBarItemName("ticket", "tickets")
 
-	// Custom KeyMap that doesn't conflict with app-level keybinds
-	km := table.KeyMap{
-		LineUp:       key.NewBinding(key.WithKeys("up", "k")),
-		LineDown:     key.NewBinding(key.WithKeys("down", "j")),
-		PageUp:       key.NewBinding(key.WithKeys("pgup")),
-		PageDown:     key.NewBinding(key.WithKeys("pgdown")),
-		HalfPageUp:   key.NewBinding(key.WithKeys("ctrl+u")),
-		HalfPageDown: key.NewBinding(key.WithKeys("ctrl+d")),
-		GotoTop:      key.NewBinding(key.WithKeys("home")),
-		GotoBottom:   key.NewBinding(key.WithKeys("end")),
-	}
-
-	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		BorderBottom(true).
-		Bold(true).
-		Foreground(lipgloss.Color("240"))
-	s.Selected = s.Selected.
-		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("62")).
-		Bold(true)
-
-	t := table.New(
-		table.WithColumns(cols),
-		table.WithHeight(height),
-		table.WithWidth(width),
-		table.WithFocused(true),
-		table.WithKeyMap(km),
-		table.WithStyles(s),
-	)
+	// Style the list
+	l.Styles.NoItems = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Padding(1, 2)
 
 	return &ListPane{
-		table:  t,
+		list:   l,
 		width:  width,
 		height: height,
-	}
-}
-
-func listColumns(width int) []table.Column {
-	// STATUS(7) + ID(8) + ASSIGNEE(8) + AGE(4) + gaps = ~35, rest is TITLE
-	statusW := 7
-	idW := 8
-	assigneeW := 8
-	ageW := 4
-	fixedW := statusW + idW + assigneeW + ageW + 8 // padding
-	titleW := width - fixedW
-	if titleW < 10 {
-		titleW = 10
-	}
-	return []table.Column{
-		{Title: "STATUS", Width: statusW},
-		{Title: "ID", Width: idW},
-		{Title: "ASSIGNEE", Width: assigneeW},
-		{Title: "AGE", Width: ageW},
-		{Title: "TITLE", Width: titleW},
 	}
 }
 
@@ -107,34 +137,30 @@ func (lp *ListPane) SetTickets(tickets []model.Ticket) {
 
 	lp.tickets = tickets
 
-	rows := make([]table.Row, len(tickets))
+	items := make([]list.Item, len(tickets))
 	for i, t := range tickets {
-		rows[i] = lp.BuildRow(t)
+		items[i] = TicketItem{ticket: t}
 	}
-	lp.table.SetRows(rows)
+	lp.list.SetItems(items)
 
 	// Restore selection by ID
 	if selectedID != "" {
 		for i, t := range tickets {
 			if t.ID == selectedID {
-				lp.table.SetCursor(i)
+				lp.list.Select(i)
 				return
 			}
 		}
 	}
-	// If not found, clamp cursor
-	if lp.table.Cursor() >= len(tickets) && len(tickets) > 0 {
-		lp.table.SetCursor(len(tickets) - 1)
-	}
 }
 
-// BuildRow converts a ticket into a table row.
-func (lp *ListPane) BuildRow(t model.Ticket) table.Row {
+// BuildRow converts a ticket into a string slice (for test compatibility).
+func (lp *ListPane) BuildRow(t model.Ticket) []string {
 	assignee := "--"
 	if t.Assignee != "" {
 		assignee = "@" + t.Assignee
 	}
-	return table.Row{
+	return []string{
 		FormatStatus(t.Status),
 		t.ID,
 		assignee,
@@ -143,7 +169,7 @@ func (lp *ListPane) BuildRow(t model.Ticket) table.Row {
 	}
 }
 
-// RowCount returns the number of rows in the table.
+// RowCount returns the number of tickets.
 func (lp *ListPane) RowCount() int {
 	return len(lp.tickets)
 }
@@ -153,55 +179,49 @@ func (lp *ListPane) SelectedTicket() *model.Ticket {
 	if len(lp.tickets) == 0 {
 		return nil
 	}
-	idx := lp.table.Cursor()
-	if idx >= len(lp.tickets) {
+	item := lp.list.SelectedItem()
+	if item == nil {
 		return nil
 	}
-	return &lp.tickets[idx]
+	ti, ok := item.(TicketItem)
+	if !ok {
+		return nil
+	}
+	return &ti.ticket
 }
 
-// SetCursor sets the table cursor position.
+// SetCursor sets the list selection position.
 func (lp *ListPane) SetCursor(n int) {
-	lp.table.SetCursor(n)
+	lp.list.Select(n)
 }
 
-// Cursor returns the current cursor position.
+// Cursor returns the current index.
 func (lp *ListPane) Cursor() int {
-	return lp.table.Cursor()
+	return lp.list.Index()
 }
 
-// Focus gives focus to the table.
-func (lp *ListPane) Focus() {
-	lp.table.Focus()
+// Filtering returns true if the list is currently in filter mode.
+func (lp *ListPane) Filtering() bool {
+	return lp.list.FilterState() == list.Filtering
 }
 
-// Blur removes focus from the table.
-func (lp *ListPane) Blur() {
-	lp.table.Blur()
-}
-
-// Focused returns whether the table is focused.
-func (lp *ListPane) Focused() bool {
-	return lp.table.Focused()
-}
-
-// Update delegates to the bubbles table Update.
+// Update delegates to the bubbles list Update.
 func (lp *ListPane) Update(msg tea.Msg) tea.Cmd {
 	var cmd tea.Cmd
-	lp.table, cmd = lp.table.Update(msg)
+	lp.list, cmd = lp.list.Update(msg)
 	return cmd
 }
 
-// View renders the table.
+// View renders the list.
 func (lp *ListPane) View() string {
-	return lp.table.View()
+	return lp.list.View()
 }
 
 // SetSize updates the pane dimensions.
 func (lp *ListPane) SetSize(width, height int) {
 	lp.width = width
 	lp.height = height
-	lp.table.SetWidth(width)
-	lp.table.SetHeight(height)
-	lp.table.SetColumns(listColumns(width))
+	lp.list.SetWidth(width)
+	lp.list.SetHeight(height)
+	lp.list.SetDelegate(ticketDelegate{width: width})
 }

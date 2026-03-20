@@ -138,3 +138,13 @@ func TestListPane_BuildRow_NoAssignee(t *testing.T) {
 		t.Fatalf("row[2] (no assignee) = %q, want %q", row[2], "--")
 	}
 }
+
+func TestListPane_Filtering(t *testing.T) {
+	lp := NewListPane(80, 20)
+	lp.SetTickets(testTickets())
+
+	// Initially not filtering
+	if lp.Filtering() {
+		t.Fatal("should not be filtering initially")
+	}
+}

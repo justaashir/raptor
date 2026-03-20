@@ -108,10 +108,8 @@ func (a *App) SelectedTicket() *model.Ticket {
 func (a *App) toggleFocus() {
 	if a.focused == focusList {
 		a.focused = focusDetail
-		a.listPane.Blur()
 	} else {
 		a.focused = focusList
-		a.listPane.Focus()
 	}
 }
 
@@ -185,12 +183,24 @@ func (a *App) updateBoardSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// When the list is filtering (user typing in filter box),
+	// pass ALL keys to the list — don't intercept anything.
+	if a.listPane.Filtering() {
+		prevCursor := a.listPane.Cursor()
+		cmd := a.listPane.Update(msg)
+		if a.listPane.Cursor() != prevCursor {
+			a.updateDetail()
+		}
+		return a, cmd
+	}
+
+	// App-level actions (only when not filtering)
 	switch {
 	case key.Matches(msg, keys.Quit):
 		a.quitting = true
 		return a, tea.Quit
 
-	case key.Matches(msg, keys.Tab), key.Matches(msg, keys.Left), key.Matches(msg, keys.Right):
+	case key.Matches(msg, keys.Tab):
 		a.toggleFocus()
 		return a, nil
 
@@ -216,10 +226,12 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case key.Matches(msg, keys.SwitchBoard):
-		return a, a.fetchBoards
+		if a.focused == focusList {
+			return a, a.fetchBoards
+		}
 
 	default:
-		// Delegate to focused pane
+		// Delegate to focused pane — list handles j/k, /, pgup/pgdn etc.
 		if a.focused == focusList {
 			prevCursor := a.listPane.Cursor()
 			cmd := a.listPane.Update(msg)
@@ -439,8 +451,6 @@ func (a *App) deleteTicket(id string) tea.Cmd {
 type keyMap struct {
 	Up          key.Binding
 	Down        key.Binding
-	Left        key.Binding
-	Right       key.Binding
 	Enter       key.Binding
 	Move        key.Binding
 	Delete      key.Binding
@@ -456,11 +466,9 @@ type keyMap struct {
 var keys = keyMap{
 	Up:          key.NewBinding(key.WithKeys("up", "k")),
 	Down:        key.NewBinding(key.WithKeys("down", "j")),
-	Left:        key.NewBinding(key.WithKeys("left", "h")),
-	Right:       key.NewBinding(key.WithKeys("right", "l")),
 	Enter:       key.NewBinding(key.WithKeys("enter")),
 	Move:        key.NewBinding(key.WithKeys("m")),
-	Delete:      key.NewBinding(key.WithKeys("d")),
+	Delete:      key.NewBinding(key.WithKeys("x")),
 	Refresh:     key.NewBinding(key.WithKeys("r")),
 	New:         key.NewBinding(key.WithKeys("n")),
 	Edit:        key.NewBinding(key.WithKeys("e")),
