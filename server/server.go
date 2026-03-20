@@ -455,6 +455,9 @@ func (s *Server) createTicket(c echo.Context) error {
 		ticket.Status = model.Status(statuses[0])
 	}
 	if input.Assign != "" {
+		if _, err := s.db.GetMemberRole(wid, input.Assign); err != nil {
+			return jsonErr(c, http.StatusBadRequest, "assignee is not a workspace member")
+		}
 		ticket.Assignee = input.Assign
 		ticket.AssignedBy = u
 	}
@@ -517,6 +520,9 @@ func (s *Server) updateTicket(c echo.Context) error {
 		}
 	}
 	if assignee, ok := fields["assignee"].(string); ok && assignee != "" {
+		if _, err := s.db.GetMemberRole(wid, assignee); err != nil {
+			return jsonErr(c, http.StatusBadRequest, "assignee is not a workspace member")
+		}
 		fields["assigned_by"] = username(c)
 	}
 	if err := s.db.UpdateTicket(tid, fields); err != nil {
