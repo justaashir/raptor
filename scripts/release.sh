@@ -39,12 +39,8 @@ case "$BUMP" in
 esac
 
 VERSION="${MAJOR}.${MINOR}.${PATCH}"
-echo "$VERSION" > "$ROOT_DIR/VERSION"
 
 echo "Releasing v${VERSION} → ${SERVER}"
-
-# Set Railway env var
-railway variables set VERSION="$VERSION" 2>/dev/null || echo "Warning: could not set Railway VERSION (set manually)"
 
 # Cross-compile
 PLATFORMS="darwin/arm64 darwin/amd64 linux/amd64 linux/arm64"
@@ -67,7 +63,10 @@ for platform in $PLATFORMS; do
     curl -fsSL -X PUT --data-binary "@$DIST_DIR/raptor-${GOOS}-${GOARCH}" "${SERVER}/admin/releases/${GOOS}/${GOARCH}"
 done
 
-# Commit, tag, GitHub release
+# Everything succeeded — now commit the version bump
+echo "$VERSION" > "$ROOT_DIR/VERSION"
+railway variables set VERSION="$VERSION" 2>/dev/null || echo "Warning: could not set Railway VERSION (set manually)"
+
 cd "$ROOT_DIR"
 git add VERSION
 git commit -m "Release v${VERSION}" || true
