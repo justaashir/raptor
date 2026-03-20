@@ -86,6 +86,21 @@ var updateCmd = &cobra.Command{
 		}
 
 		fmt.Printf("Updated to %s\n", latest)
+
+		// Update Claude Code skill
+		skillResp, err := http.Get(serverURL + "/api/skill")
+		if err == nil && skillResp.StatusCode == http.StatusOK {
+			defer skillResp.Body.Close()
+			homeDir, _ := os.UserHomeDir()
+			skillDir := homeDir + "/.claude/skills/raptor"
+			os.MkdirAll(skillDir, 0o755)
+			skillData, _ := io.ReadAll(skillResp.Body)
+			if len(skillData) > 0 {
+				os.WriteFile(skillDir+"/SKILL.md", skillData, 0o644)
+				fmt.Println("Claude Code skill updated.")
+			}
+		}
+
 		return nil
 	},
 }
