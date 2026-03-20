@@ -1,22 +1,22 @@
 package server
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func TestGenerateAndValidateToken(t *testing.T) {
 	secret := "test-secret-key"
-	token := GenerateToken("alice", secret)
+	token, err := GenerateToken("alice", secret)
+	if err != nil {
+		t.Fatalf("unexpected error generating token: %v", err)
+	}
 	username, err := ValidateToken(token, secret)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -26,14 +26,11 @@ func TestGenerateAndValidateToken(t *testing.T) {
 	}
 }
 
-func TestValidateToken_BadHMAC(t *testing.T) {
-	token := GenerateToken("alice", "secret1")
+func TestValidateToken_BadSecret(t *testing.T) {
+	token, _ := GenerateToken("alice", "secret1")
 	_, err := ValidateToken(token, "secret2")
 	if err == nil {
-		t.Fatal("expected error for bad HMAC")
-	}
-	if !strings.Contains(err.Error(), "signature") {
-		t.Fatalf("expected signature error, got: %v", err)
+		t.Fatal("expected error for bad secret")
 	}
 }
 
@@ -44,22 +41,25 @@ func TestValidateToken_Expired(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for expired token")
 	}
-	if !strings.Contains(err.Error(), "expired") {
-		t.Fatalf("expected expired error, got: %v", err)
-	}
-}
-
-func TestValidateToken_InvalidEncoding(t *testing.T) {
-	_, err := ValidateToken("not-valid-base64!!!", "secret")
-	if err == nil {
-		t.Fatal("expected error for invalid encoding")
-	}
 }
 
 func TestValidateToken_InvalidFormat(t *testing.T) {
-	_, err := ValidateToken("aGVsbG8", "secret") // base64 of "hello" — no colons
+	_, err := ValidateToken("not-a-jwt-token", "secret")
 	if err == nil {
-		t.Fatal("expected error for invalid format")
+		t.Fatal("expected error for invalid token")
+	}
+}
+
+func TestValidateToken_WrongSigningMethod(t *testing.T) {
+	// Create a token with "none" signing method
+	token := jwt.NewWithClaims(jwt.SigningMethodNone, jwt.RegisteredClaims{
+		Subject:   "alice",
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+	})
+	tokenStr, _ := token.SignedString(jwt.UnsafeAllowNoneSignatureType)
+	_, err := ValidateToken(tokenStr, "secret")
+	if err == nil {
+		t.Fatal("expected error for none signing method")
 	}
 }
 
@@ -97,7 +97,7 @@ func TestAuthMiddleware_RequiresToken(t *testing.T) {
 
 func TestAuthMiddleware_ValidToken(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
-	token := GenerateToken("alice", "secret")
+	token, _ := GenerateToken("alice", "secret")
 
 	req := httptest.NewRequest("GET", "/api/workspaces/", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -183,11 +183,12 @@ func newTestServerWithAuth(t *testing.T, secret string, users []string) *Server 
 }
 
 func makeExpiredToken(username, secret string) string {
-	expiry := time.Now().Add(-time.Hour).Unix()
-	payload := fmt.Sprintf("%s:%d", username, expiry)
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write([]byte(payload))
-	sig := hex.EncodeToString(mac.Sum(nil))
-	raw := fmt.Sprintf("%s:%d:%s", username, expiry, sig)
-	return base64.RawURLEncoding.EncodeToString([]byte(raw))
+	claims := jwt.RegisteredClaims{
+		Subject:   username,
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(-time.Hour)),
+		IssuedAt:  jwt.NewNumericDate(time.Now().Add(-2 * time.Hour)),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	str, _ := token.SignedString([]byte(secret))
+	return str
 }

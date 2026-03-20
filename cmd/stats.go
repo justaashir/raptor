@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"raptor/client"
 
 	"github.com/spf13/cobra"
 )
@@ -14,7 +13,7 @@ var statsCmd = &cobra.Command{
 		if err := requireBoard(); err != nil {
 			return err
 		}
-		c := client.NewScoped(serverURL, authToken, activeWS, activeBoard)
+		c := newClient()
 
 		// Try server-side stats first, fall back to client-side counting
 		result, err := c.TicketStats()

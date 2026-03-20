@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"raptor/client"
 
 	"github.com/spf13/cobra"
 )
@@ -21,7 +20,7 @@ var rmCmd = &cobra.Command{
 			fmt.Printf("Delete ticket %s? Use --force to confirm.\n", args[0])
 			return nil
 		}
-		c := client.NewScoped(serverURL, authToken, activeWS, activeBoard)
+		c := newClient()
 		if err := c.DeleteTicket(args[0]); err != nil {
 			return err
 		}

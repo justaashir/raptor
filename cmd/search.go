@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"raptor/client"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -17,7 +16,7 @@ var searchCmd = &cobra.Command{
 			return err
 		}
 		query := strings.Join(args, " ")
-		c := client.NewScoped(serverURL, authToken, activeWS, activeBoard)
+		c := newClient()
 		tickets, err := c.SearchTickets(query)
 		if err != nil {
 			return err
