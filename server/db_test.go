@@ -486,6 +486,60 @@ func TestDB_ListTickets_IncludesClosedWhenFiltered(t *testing.T) {
 	}
 }
 
+func TestDB_SearchTickets(t *testing.T) {
+	db := newTestDB(t)
+	t1 := model.NewTicket("Fix login bug", "auth is broken", "alice")
+	db.CreateTicket(t1)
+	t2 := model.NewTicket("Add dashboard", "new feature", "alice")
+	db.CreateTicket(t2)
+	t3 := model.NewTicket("Update readme", "", "alice")
+	db.CreateTicket(t3)
+
+	// Search by title
+	tickets, err := db.SearchTickets("", "login")
+	if err != nil {
+		t.Fatalf("failed to search: %v", err)
+	}
+	if len(tickets) != 1 {
+		t.Fatalf("expected 1 result for 'login', got %d", len(tickets))
+	}
+	if tickets[0].Title != "Fix login bug" {
+		t.Fatalf("expected 'Fix login bug', got %q", tickets[0].Title)
+	}
+
+	// Search by content
+	tickets, _ = db.SearchTickets("", "feature")
+	if len(tickets) != 1 {
+		t.Fatalf("expected 1 result for 'feature', got %d", len(tickets))
+	}
+
+	// Case insensitive
+	tickets, _ = db.SearchTickets("", "LOGIN")
+	if len(tickets) != 1 {
+		t.Fatalf("expected case-insensitive match, got %d", len(tickets))
+	}
+
+	// No match
+	tickets, _ = db.SearchTickets("", "nonexistent")
+	if len(tickets) != 0 {
+		t.Fatalf("expected 0 results, got %d", len(tickets))
+	}
+}
+
+func TestDB_SearchTickets_ExcludesClosed(t *testing.T) {
+	db := newTestDB(t)
+	t1 := model.NewTicket("Open login bug", "", "alice")
+	db.CreateTicket(t1)
+	t2 := model.NewTicket("Closed login issue", "", "alice")
+	t2.Status = model.Closed
+	db.CreateTicket(t2)
+
+	tickets, _ := db.SearchTickets("", "login")
+	if len(tickets) != 1 {
+		t.Fatalf("expected 1 result (closed excluded), got %d", len(tickets))
+	}
+}
+
 func TestDB_AssigneeField(t *testing.T) {
 	db := newTestDB(t)
 	ticket := model.NewTicket("Assigned task", "", "alice")

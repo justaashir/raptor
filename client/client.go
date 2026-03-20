@@ -91,6 +91,18 @@ func (c *Client) ListTickets(status string, mine bool, all ...bool) ([]model.Tic
 	return tickets, nil
 }
 
+func (c *Client) SearchTickets(query string) ([]model.Ticket, error) {
+	req, _ := http.NewRequest("GET", c.ticketsURL()+"?q="+query, nil)
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var tickets []model.Ticket
+	json.NewDecoder(resp.Body).Decode(&tickets)
+	return tickets, nil
+}
+
 func (c *Client) GetTicket(id string) (model.Ticket, error) {
 	req, _ := http.NewRequest("GET", c.ticketsURL()+"/"+id, nil)
 	resp, err := c.do(req)

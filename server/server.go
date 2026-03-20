@@ -461,9 +461,12 @@ func (s *Server) handleBoardTickets(w http.ResponseWriter, r *http.Request, wid,
 		status := r.URL.Query().Get("status")
 		mine := r.URL.Query().Get("mine")
 		all := r.URL.Query().Get("all")
+		query := r.URL.Query().Get("q")
 		var tickets []model.Ticket
 		var err error
-		if all == "true" {
+		if query != "" {
+			tickets, err = s.db.SearchTickets(bid, query)
+		} else if all == "true" {
 			tickets, err = s.db.ListAllTickets(bid)
 		} else {
 			tickets, err = s.db.ListTickets(bid, status)

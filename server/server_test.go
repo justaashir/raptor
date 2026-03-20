@@ -556,6 +556,35 @@ func TestServer_CreatedByFromAuth(t *testing.T) {
 	}
 }
 
+func TestServer_SearchTickets(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
+	token := GenerateToken("alice", "secret")
+	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
+
+	for _, title := range []string{"Fix login bug", "Add dashboard", "Update readme"} {
+		body := fmt.Sprintf(`{"title":"%s"}`, title)
+		req := httptest.NewRequest("POST", ticketURL(wsID, bdID), strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, req)
+	}
+
+	req := httptest.NewRequest("GET", ticketURL(wsID, bdID)+"?q=login", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	var tickets []model.Ticket
+	json.NewDecoder(w.Body).Decode(&tickets)
+	if len(tickets) != 1 {
+		t.Fatalf("expected 1 search result, got %d", len(tickets))
+	}
+	if tickets[0].Title != "Fix login bug" {
+		t.Fatalf("expected 'Fix login bug', got %q", tickets[0].Title)
+	}
+}
+
 func TestServer_ListTickets_ExcludesClosedByDefault(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
 	token := GenerateToken("alice", "secret")

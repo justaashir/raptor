@@ -267,6 +267,18 @@ func (db *DB) ListTickets(boardID, status string) ([]model.Ticket, error) {
 	return tickets, err
 }
 
+func (db *DB) SearchTickets(boardID, query string) ([]model.Ticket, error) {
+	var tickets []model.Ticket
+	q := db.conn.Model(&model.Ticket{}).
+		Where("status != ?", model.Closed).
+		Where("(title LIKE ? OR content LIKE ?)", "%"+query+"%", "%"+query+"%")
+	if boardID != "" {
+		q = q.Where("board_id = ?", boardID)
+	}
+	err := q.Order("created_at DESC").Find(&tickets).Error
+	return tickets, err
+}
+
 func (db *DB) UpdateTicket(id string, fields map[string]any) error {
 	if len(fields) == 0 {
 		return fmt.Errorf("no fields to update")
