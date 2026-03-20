@@ -15,14 +15,16 @@ const (
 )
 
 type Ticket struct {
-	ID        string    `json:"id"`
-	Title     string    `json:"title"`
-	Content   string    `json:"content"`
-	Status    Status    `json:"status"`
-	CreatedBy string    `json:"created_by"`
-	Assignee  string    `json:"assignee"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID         string    `json:"id"`
+	Title      string    `json:"title"`
+	Content    string    `json:"content"`
+	Status     Status    `json:"status"`
+	BoardID    string    `json:"board_id"`
+	CreatedBy  string    `json:"created_by"`
+	Assignee   string    `json:"assignee"`
+	AssignedBy string    `json:"assigned_by"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 func ValidStatus(s Status) bool {

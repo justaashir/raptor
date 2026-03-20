@@ -118,6 +118,24 @@ func TestDB_DeleteTicket(t *testing.T) {
 	}
 }
 
+func TestDB_CreateWorkspace(t *testing.T) {
+	db := newTestDB(t)
+	err := db.CreateWorkspace("ws123456", "My Team", "alice")
+	if err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+	workspaces, err := db.ListWorkspacesForUser("alice")
+	if err != nil {
+		t.Fatalf("failed to list workspaces: %v", err)
+	}
+	if len(workspaces) != 1 {
+		t.Fatalf("expected 1 workspace, got %d", len(workspaces))
+	}
+	if workspaces[0].Name != "My Team" {
+		t.Fatalf("expected name %q, got %q", "My Team", workspaces[0].Name)
+	}
+}
+
 func TestDB_AssigneeField(t *testing.T) {
 	db := newTestDB(t)
 	ticket := model.NewTicket("Assigned task", "", "alice")
