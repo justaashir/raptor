@@ -78,6 +78,8 @@ func isPublicRoute(path string) bool {
 		return true
 	case strings.HasPrefix(path, "/releases/"):
 		return true
+	case strings.HasPrefix(path, "/admin/releases/"):
+		return true
 	case path == "/ws":
 		return true
 	}
