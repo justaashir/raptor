@@ -345,6 +345,43 @@ func TestDB_TicketsScoped_ToBoard(t *testing.T) {
 	}
 }
 
+func TestDB_Migration_SeedUsers(t *testing.T) {
+	// Simulates fresh install with seed users
+	db, err := NewDB(":memory:", "alice", "bob")
+	if err != nil {
+		t.Fatalf("failed to create db: %v", err)
+	}
+	defer db.Close()
+
+	// Should create default workspace
+	workspaces, _ := db.ListWorkspacesForUser("alice")
+	if len(workspaces) != 1 {
+		t.Fatalf("expected 1 workspace for alice, got %d", len(workspaces))
+	}
+	if workspaces[0].Name != "Default" {
+		t.Fatalf("expected workspace name Default, got %q", workspaces[0].Name)
+	}
+
+	// alice should be owner, bob should be admin
+	role, _ := db.GetMemberRole(workspaces[0].ID, "alice")
+	if role != "owner" {
+		t.Fatalf("expected alice to be owner, got %q", role)
+	}
+	role, _ = db.GetMemberRole(workspaces[0].ID, "bob")
+	if role != "admin" {
+		t.Fatalf("expected bob to be admin, got %q", role)
+	}
+
+	// Should create default board
+	boards, _ := db.ListBoardsForUser(workspaces[0].ID, "alice")
+	if len(boards) != 1 {
+		t.Fatalf("expected 1 board, got %d", len(boards))
+	}
+	if boards[0].Name != "Default" {
+		t.Fatalf("expected board name Default, got %q", boards[0].Name)
+	}
+}
+
 func TestDB_DeleteWorkspace(t *testing.T) {
 	db := newTestDB(t)
 	db.CreateWorkspace("ws1", "Team", "alice")
