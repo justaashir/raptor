@@ -474,10 +474,7 @@ func newHTTPClient(baseURL, token, workspace, board string) *httpClient {
 }
 
 func (c *httpClient) ticketsURL() string {
-	if c.workspace != "" && c.board != "" {
-		return fmt.Sprintf("%s/api/workspaces/%s/boards/%s/tickets", c.baseURL, c.workspace, c.board)
-	}
-	return c.baseURL + "/api/tickets"
+	return fmt.Sprintf("%s/api/workspaces/%s/boards/%s/tickets", c.baseURL, c.workspace, c.board)
 }
 
 func (c *httpClient) ListTickets(status string) ([]model.Ticket, error) {

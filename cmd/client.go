@@ -40,13 +40,8 @@ func (c *Client) do(req *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
-// ticketsURL returns the board-scoped ticket URL if workspace/board are set,
-// otherwise falls back to the old /api/tickets endpoint.
 func (c *Client) ticketsURL() string {
-	if c.workspace != "" && c.board != "" {
-		return fmt.Sprintf("%s/api/workspaces/%s/boards/%s/tickets", c.baseURL, c.workspace, c.board)
-	}
-	return c.baseURL + "/api/tickets"
+	return fmt.Sprintf("%s/api/workspaces/%s/boards/%s/tickets", c.baseURL, c.workspace, c.board)
 }
 
 func (c *Client) CreateTicket(title, content, assignee string) (model.Ticket, error) {

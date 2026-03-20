@@ -78,7 +78,7 @@ func TestAuthMiddleware_PublicRoutes(t *testing.T) {
 func TestAuthMiddleware_RequiresToken(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
 
-	req := httptest.NewRequest("GET", "/api/tickets", nil)
+	req := httptest.NewRequest("GET", "/api/workspaces/", nil)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusUnauthorized {
@@ -90,7 +90,7 @@ func TestAuthMiddleware_ValidToken(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
 	token := GenerateToken("alice", "secret")
 
-	req := httptest.NewRequest("GET", "/api/tickets", nil)
+	req := httptest.NewRequest("GET", "/api/workspaces/", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)

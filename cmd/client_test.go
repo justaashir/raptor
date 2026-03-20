@@ -13,15 +13,16 @@ func TestClient_CreateTicket(t *testing.T) {
 		if r.Method != "POST" {
 			t.Fatalf("expected POST, got %s", r.Method)
 		}
-		if r.URL.Path != "/api/tickets" {
-			t.Fatalf("expected /api/tickets, got %s", r.URL.Path)
+		expected := "/api/workspaces/ws1/boards/bd1/tickets"
+		if r.URL.Path != expected {
+			t.Fatalf("expected %s, got %s", expected, r.URL.Path)
 		}
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(model.Ticket{ID: "abc12345", Title: "Test"})
 	}))
 	defer ts.Close()
 
-	c := NewClient(ts.URL, "")
+	c := NewScopedClient(ts.URL, "", "ws1", "bd1")
 	ticket, err := c.CreateTicket("Test", "content", "")
 	if err != nil {
 		t.Fatal(err)
@@ -40,7 +41,7 @@ func TestClient_ListTickets(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := NewClient(ts.URL, "")
+	c := NewScopedClient(ts.URL, "", "ws1", "bd1")
 	tickets, err := c.ListTickets("", false)
 	if err != nil {
 		t.Fatal(err)
@@ -56,7 +57,7 @@ func TestClient_GetTicket(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := NewClient(ts.URL, "")
+	c := NewScopedClient(ts.URL, "", "ws1", "bd1")
 	ticket, err := c.GetTicket("abc")
 	if err != nil {
 		t.Fatal(err)
@@ -75,7 +76,7 @@ func TestClient_UpdateTicket(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := NewClient(ts.URL, "")
+	c := NewScopedClient(ts.URL, "", "ws1", "bd1")
 	ticket, err := c.UpdateTicket("abc", map[string]any{"title": "Updated"})
 	if err != nil {
 		t.Fatal(err)
@@ -94,7 +95,7 @@ func TestClient_DeleteTicket(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := NewClient(ts.URL, "")
+	c := NewScopedClient(ts.URL, "", "ws1", "bd1")
 	err := c.DeleteTicket("abc")
 	if err != nil {
 		t.Fatal(err)
@@ -111,7 +112,7 @@ func TestClient_AuthHeader(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := NewClient(ts.URL, "test-token")
+	c := NewScopedClient(ts.URL, "test-token", "ws1", "bd1")
 	_, err := c.ListTickets("", false)
 	if err != nil {
 		t.Fatal(err)
@@ -126,15 +127,7 @@ func TestClient_ScopedURLs(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	// Without scope — uses old URL
-	c := NewClient(ts.URL, "")
-	c.ListTickets("", false)
-	if gotPath != "/api/tickets" {
-		t.Fatalf("expected /api/tickets, got %s", gotPath)
-	}
-
-	// With scope — uses workspace/board URL
-	c = NewScopedClient(ts.URL, "", "ws1", "bd1")
+	c := NewScopedClient(ts.URL, "", "ws1", "bd1")
 	c.ListTickets("", false)
 	expected := "/api/workspaces/ws1/boards/bd1/tickets"
 	if gotPath != expected {

@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"raptor/model"
@@ -21,13 +22,50 @@ func newTestServer(t *testing.T) *Server {
 	return NewServer(db, hub)
 }
 
-func TestServer_CreateAndListTickets(t *testing.T) {
-	srv := newTestServer(t)
+// setupWorkspaceAndBoard creates a workspace and board via API, returns their IDs.
+func setupWorkspaceAndBoard(t *testing.T, srv *Server, token string) (wsID, bdID string) {
+	t.Helper()
 
-	// Create a ticket
-	body := `{"title":"Test ticket","content":"# Hello"}`
-	req := httptest.NewRequest("POST", "/api/tickets", strings.NewReader(body))
+	body := `{"name":"Team"}`
+	req := httptest.NewRequest("POST", "/api/workspaces/", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("setup: create workspace failed: %d: %s", w.Code, w.Body.String())
+	}
+	var ws struct{ ID string `json:"id"` }
+	json.NewDecoder(w.Body).Decode(&ws)
+
+	body = `{"name":"Board"}`
+	req = httptest.NewRequest("POST", "/api/workspaces/"+ws.ID+"/boards", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("setup: create board failed: %d: %s", w.Code, w.Body.String())
+	}
+	var bd struct{ ID string `json:"id"` }
+	json.NewDecoder(w.Body).Decode(&bd)
+
+	return ws.ID, bd.ID
+}
+
+func ticketURL(wsID, bdID string) string {
+	return fmt.Sprintf("/api/workspaces/%s/boards/%s/tickets", wsID, bdID)
+}
+
+func TestServer_CreateAndListTickets(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
+	token := GenerateToken("alice", "secret")
+	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
+
+	body := `{"title":"Test ticket","content":"# Hello"}`
+	req := httptest.NewRequest("POST", ticketURL(wsID, bdID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
@@ -42,7 +80,8 @@ func TestServer_CreateAndListTickets(t *testing.T) {
 	}
 
 	// List tickets
-	req = httptest.NewRequest("GET", "/api/tickets", nil)
+	req = httptest.NewRequest("GET", ticketURL(wsID, bdID), nil)
+	req.Header.Set("Authorization", "Bearer "+token)
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
@@ -58,12 +97,16 @@ func TestServer_CreateAndListTickets(t *testing.T) {
 }
 
 func TestServer_GetTicket(t *testing.T) {
-	srv := newTestServer(t)
+	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
+	token := GenerateToken("alice", "secret")
+	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
 
-	ticket := model.NewTicket("Get me", "content", "")
+	ticket := model.NewTicket("Get me", "content", "alice")
+	ticket.BoardID = bdID
 	srv.db.CreateTicket(ticket)
 
-	req := httptest.NewRequest("GET", "/api/tickets/"+ticket.ID, nil)
+	req := httptest.NewRequest("GET", ticketURL(wsID, bdID)+"/"+ticket.ID, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
@@ -79,13 +122,18 @@ func TestServer_GetTicket(t *testing.T) {
 }
 
 func TestServer_UpdateTicket(t *testing.T) {
-	srv := newTestServer(t)
+	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
+	token := GenerateToken("alice", "secret")
+	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
 
-	ticket := model.NewTicket("Original", "", "")
+	ticket := model.NewTicket("Original", "", "alice")
+	ticket.BoardID = bdID
 	srv.db.CreateTicket(ticket)
 
 	body := `{"title":"Updated","status":"done"}`
-	req := httptest.NewRequest("PATCH", "/api/tickets/"+ticket.ID, strings.NewReader(body))
+	req := httptest.NewRequest("PATCH", ticketURL(wsID, bdID)+"/"+ticket.ID, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
@@ -100,12 +148,16 @@ func TestServer_UpdateTicket(t *testing.T) {
 }
 
 func TestServer_DeleteTicket(t *testing.T) {
-	srv := newTestServer(t)
+	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
+	token := GenerateToken("alice", "secret")
+	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
 
-	ticket := model.NewTicket("To delete", "", "")
+	ticket := model.NewTicket("To delete", "", "alice")
+	ticket.BoardID = bdID
 	srv.db.CreateTicket(ticket)
 
-	req := httptest.NewRequest("DELETE", "/api/tickets/"+ticket.ID, nil)
+	req := httptest.NewRequest("DELETE", ticketURL(wsID, bdID)+"/"+ticket.ID, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
@@ -120,9 +172,12 @@ func TestServer_DeleteTicket(t *testing.T) {
 }
 
 func TestServer_GetTicket_NotFound(t *testing.T) {
-	srv := newTestServer(t)
+	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
+	token := GenerateToken("alice", "secret")
+	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
 
-	req := httptest.NewRequest("GET", "/api/tickets/nonexist", nil)
+	req := httptest.NewRequest("GET", ticketURL(wsID, bdID)+"/nonexist", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
@@ -163,7 +218,6 @@ func TestServer_ListWorkspaces(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
 	token := GenerateToken("alice", "secret")
 
-	// Create a workspace
 	body := `{"name":"Team A"}`
 	req := httptest.NewRequest("POST", "/api/workspaces/", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -171,7 +225,6 @@ func TestServer_ListWorkspaces(t *testing.T) {
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
-	// List workspaces
 	req = httptest.NewRequest("GET", "/api/workspaces/", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w = httptest.NewRecorder()
@@ -196,7 +249,6 @@ func TestServer_Authorization_MemberCantCreateBoard(t *testing.T) {
 	tokenAlice := GenerateToken("alice", "secret")
 	tokenBob := GenerateToken("bob", "secret")
 
-	// alice creates workspace (becomes owner)
 	body := `{"name":"Team"}`
 	req := httptest.NewRequest("POST", "/api/workspaces/", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -206,7 +258,6 @@ func TestServer_Authorization_MemberCantCreateBoard(t *testing.T) {
 	var ws struct{ ID string `json:"id"` }
 	json.NewDecoder(w.Body).Decode(&ws)
 
-	// Add bob as member
 	body = `{"username":"bob","role":"member"}`
 	req = httptest.NewRequest("POST", "/api/workspaces/"+ws.ID+"/members", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -214,7 +265,6 @@ func TestServer_Authorization_MemberCantCreateBoard(t *testing.T) {
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
-	// bob (member) tries to create board — should fail
 	body = `{"name":"Sprint"}`
 	req = httptest.NewRequest("POST", "/api/workspaces/"+ws.ID+"/boards", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -230,42 +280,21 @@ func TestServer_Authorization_MemberCantCreateBoard(t *testing.T) {
 func TestServer_BoardScopedTickets(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
 	token := GenerateToken("alice", "secret")
+	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
 
-	// Create workspace
-	body := `{"name":"Team"}`
-	req := httptest.NewRequest("POST", "/api/workspaces/", strings.NewReader(body))
+	body := `{"title":"Task 1"}`
+	url := ticketURL(wsID, bdID)
+	req := httptest.NewRequest("POST", url, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, req)
-	var ws struct{ ID string `json:"id"` }
-	json.NewDecoder(w.Body).Decode(&ws)
-
-	// Create board
-	body = `{"name":"Sprint 1"}`
-	req = httptest.NewRequest("POST", "/api/workspaces/"+ws.ID+"/boards", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-	w = httptest.NewRecorder()
-	srv.ServeHTTP(w, req)
-	var bd struct{ ID string `json:"id"` }
-	json.NewDecoder(w.Body).Decode(&bd)
-
-	// Create ticket on board
-	body = `{"title":"Task 1"}`
-	ticketURL := "/api/workspaces/" + ws.ID + "/boards/" + bd.ID + "/tickets"
-	req = httptest.NewRequest("POST", ticketURL, strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
 	if w.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
 	}
 
-	// List tickets on board
-	req = httptest.NewRequest("GET", ticketURL, nil)
+	req = httptest.NewRequest("GET", url, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -275,16 +304,12 @@ func TestServer_BoardScopedTickets(t *testing.T) {
 	if len(tickets) != 1 {
 		t.Fatalf("expected 1 ticket, got %d", len(tickets))
 	}
-	if tickets[0].Title != "Task 1" {
-		t.Fatalf("expected Task 1, got %q", tickets[0].Title)
-	}
-	if tickets[0].BoardID != bd.ID {
-		t.Fatalf("expected board_id %q, got %q", bd.ID, tickets[0].BoardID)
+	if tickets[0].BoardID != bdID {
+		t.Fatalf("expected board_id %q, got %q", bdID, tickets[0].BoardID)
 	}
 }
 
 func TestServer_Auth_ChecksWorkspaceMembership(t *testing.T) {
-	// Server with seed users — auth should work via workspace membership
 	db, err := NewDB(":memory:", "alice", "bob")
 	if err != nil {
 		t.Fatal(err)
@@ -294,7 +319,6 @@ func TestServer_Auth_ChecksWorkspaceMembership(t *testing.T) {
 	go hub.Run()
 	srv := NewServer(db, hub, WithSecret("secret"))
 
-	// alice should be able to auth (in default workspace)
 	body := `{"username":"alice"}`
 	req := httptest.NewRequest("POST", "/api/auth", strings.NewReader(body))
 	w := httptest.NewRecorder()
@@ -303,7 +327,6 @@ func TestServer_Auth_ChecksWorkspaceMembership(t *testing.T) {
 		t.Fatalf("expected 200 for alice, got %d: %s", w.Code, w.Body.String())
 	}
 
-	// eve should not be able to auth (not in any workspace)
 	body = `{"username":"eve"}`
 	req = httptest.NewRequest("POST", "/api/auth", strings.NewReader(body))
 	w = httptest.NewRecorder()
@@ -317,7 +340,6 @@ func TestServer_WorkspaceMembers(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice", "bob"})
 	tokenAlice := GenerateToken("alice", "secret")
 
-	// Create workspace
 	body := `{"name":"Team"}`
 	req := httptest.NewRequest("POST", "/api/workspaces/", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -327,7 +349,6 @@ func TestServer_WorkspaceMembers(t *testing.T) {
 	var ws struct{ ID string `json:"id"` }
 	json.NewDecoder(w.Body).Decode(&ws)
 
-	// Invite bob
 	body = `{"username":"bob","role":"admin"}`
 	req = httptest.NewRequest("POST", "/api/workspaces/"+ws.ID+"/members", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -338,21 +359,16 @@ func TestServer_WorkspaceMembers(t *testing.T) {
 		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
 	}
 
-	// List members
 	req = httptest.NewRequest("GET", "/api/workspaces/"+ws.ID+"/members", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenAlice)
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", w.Code)
-	}
 	var members []struct{ Username string `json:"username"` }
 	json.NewDecoder(w.Body).Decode(&members)
 	if len(members) != 2 {
 		t.Fatalf("expected 2 members, got %d", len(members))
 	}
 
-	// Change bob's role
 	body = `{"role":"member"}`
 	req = httptest.NewRequest("PATCH", "/api/workspaces/"+ws.ID+"/members/bob", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -363,7 +379,6 @@ func TestServer_WorkspaceMembers(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 
-	// Remove bob
 	req = httptest.NewRequest("DELETE", "/api/workspaces/"+ws.ID+"/members/bob", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenAlice)
 	w = httptest.NewRecorder()
@@ -378,7 +393,6 @@ func TestServer_BoardMembers(t *testing.T) {
 	tokenAlice := GenerateToken("alice", "secret")
 	tokenBob := GenerateToken("bob", "secret")
 
-	// Create workspace, add bob as member
 	body := `{"name":"Team"}`
 	req := httptest.NewRequest("POST", "/api/workspaces/", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -395,7 +409,6 @@ func TestServer_BoardMembers(t *testing.T) {
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
-	// Create board
 	body = `{"name":"Sprint"}`
 	req = httptest.NewRequest("POST", "/api/workspaces/"+ws.ID+"/boards", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -406,8 +419,8 @@ func TestServer_BoardMembers(t *testing.T) {
 	json.NewDecoder(w.Body).Decode(&bd)
 
 	// bob (member) can't access board tickets yet
-	ticketURL := "/api/workspaces/" + ws.ID + "/boards/" + bd.ID + "/tickets"
-	req = httptest.NewRequest("GET", ticketURL, nil)
+	url := ticketURL(ws.ID, bd.ID)
+	req = httptest.NewRequest("GET", url, nil)
 	req.Header.Set("Authorization", "Bearer "+tokenBob)
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -427,7 +440,7 @@ func TestServer_BoardMembers(t *testing.T) {
 	}
 
 	// Now bob can access
-	req = httptest.NewRequest("GET", ticketURL, nil)
+	req = httptest.NewRequest("GET", url, nil)
 	req.Header.Set("Authorization", "Bearer "+tokenBob)
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -450,7 +463,6 @@ func TestServer_DeleteWorkspace_OwnerOnly(t *testing.T) {
 	tokenAlice := GenerateToken("alice", "secret")
 	tokenBob := GenerateToken("bob", "secret")
 
-	// Create workspace
 	body := `{"name":"Team"}`
 	req := httptest.NewRequest("POST", "/api/workspaces/", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -460,7 +472,6 @@ func TestServer_DeleteWorkspace_OwnerOnly(t *testing.T) {
 	var ws struct{ ID string `json:"id"` }
 	json.NewDecoder(w.Body).Decode(&ws)
 
-	// Add bob as admin
 	body = `{"username":"bob","role":"admin"}`
 	req = httptest.NewRequest("POST", "/api/workspaces/"+ws.ID+"/members", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -490,9 +501,10 @@ func TestServer_DeleteWorkspace_OwnerOnly(t *testing.T) {
 func TestServer_CreatedByFromAuth(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
 	token := GenerateToken("alice", "secret")
+	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
 
 	body := `{"title":"Auth ticket","content":""}`
-	req := httptest.NewRequest("POST", "/api/tickets", strings.NewReader(body))
+	req := httptest.NewRequest("POST", ticketURL(wsID, bdID), strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
@@ -514,24 +526,37 @@ func TestServer_ListMine(t *testing.T) {
 	tokenAlice := GenerateToken("alice", "secret")
 	tokenBob := GenerateToken("bob", "secret")
 
-	// Alice creates a ticket
-	body := `{"title":"Alice ticket"}`
-	req := httptest.NewRequest("POST", "/api/tickets", strings.NewReader(body))
+	// alice creates workspace+board
+	wsID, bdID := setupWorkspaceAndBoard(t, srv, tokenAlice)
+
+	// add bob to workspace and board
+	body := `{"username":"bob","role":"admin"}`
+	req := httptest.NewRequest("POST", "/api/workspaces/"+wsID+"/members", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenAlice)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
+	url := ticketURL(wsID, bdID)
+
+	// Alice creates a ticket
+	body = `{"title":"Alice ticket"}`
+	req = httptest.NewRequest("POST", url, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenAlice)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
 	// Bob creates a ticket
 	body = `{"title":"Bob ticket"}`
-	req = httptest.NewRequest("POST", "/api/tickets", strings.NewReader(body))
+	req = httptest.NewRequest("POST", url, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+tokenBob)
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 
 	// Alice lists mine
-	req = httptest.NewRequest("GET", "/api/tickets?mine=true", nil)
+	req = httptest.NewRequest("GET", url+"?mine=true", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenAlice)
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)

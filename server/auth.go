@@ -125,23 +125,28 @@ func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check workspace membership first, then fall back to allowlist
+	// Check workspace membership — user must belong to at least one workspace
 	isMember, _ := s.db.IsWorkspaceMember(input.Username)
 	if !isMember {
-		if len(s.allowedUsers) > 0 {
-			if !s.isAllowedUser(input.Username) {
-				http.Error(w, `{"error":"user not allowed"}`, http.StatusForbidden)
-				return
+		allowed := false
+		// Check seed allowlist
+		for _, u := range s.allowedUsers {
+			if strings.EqualFold(u, input.Username) {
+				allowed = true
+				break
 			}
-		} else {
-			// No allowlist and not a workspace member — check if any members exist
-			// If workspaces exist, require membership; otherwise allow (fresh install)
+		}
+		// If no allowlist and no workspace members exist yet (fresh install), allow anyone
+		if !allowed && len(s.allowedUsers) == 0 {
 			var count int
 			s.db.conn.QueryRow(`SELECT COUNT(*) FROM workspace_members`).Scan(&count)
-			if count > 0 {
-				http.Error(w, `{"error":"user not allowed"}`, http.StatusForbidden)
-				return
+			if count == 0 {
+				allowed = true
 			}
+		}
+		if !allowed {
+			http.Error(w, `{"error":"user not allowed"}`, http.StatusForbidden)
+			return
 		}
 	}
 
