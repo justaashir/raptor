@@ -12,16 +12,22 @@ var showCmd = &cobra.Command{
 	Short: "Show ticket details",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c := NewClient(serverURL)
+		c := NewClient(serverURL, authToken)
 		ticket, err := c.GetTicket(args[0])
 		if err != nil {
 			return err
 		}
-		fmt.Printf("ID:     %s\n", ticket.ID)
-		fmt.Printf("Title:  %s\n", ticket.Title)
-		fmt.Printf("Status: %s\n", ticket.Status)
-		fmt.Printf("Created: %s\n", ticket.CreatedAt.Format("2006-01-02 15:04"))
-		fmt.Printf("Updated: %s\n", ticket.UpdatedAt.Format("2006-01-02 15:04"))
+		fmt.Printf("ID:       %s\n", ticket.ID)
+		fmt.Printf("Title:    %s\n", ticket.Title)
+		fmt.Printf("Status:   %s\n", ticket.Status)
+		if ticket.CreatedBy != "" {
+			fmt.Printf("Created by: %s\n", ticket.CreatedBy)
+		}
+		if ticket.Assignee != "" {
+			fmt.Printf("Assignee: %s\n", ticket.Assignee)
+		}
+		fmt.Printf("Created:  %s\n", ticket.CreatedAt.Format("2006-01-02 15:04"))
+		fmt.Printf("Updated:  %s\n", ticket.UpdatedAt.Format("2006-01-02 15:04"))
 		if ticket.Content != "" {
 			fmt.Println()
 			rendered, err := glamour.Render(ticket.Content, "dark")

@@ -19,6 +19,8 @@ type Ticket struct {
 	Title     string    `json:"title"`
 	Content   string    `json:"content"`
 	Status    Status    `json:"status"`
+	CreatedBy string    `json:"created_by"`
+	Assignee  string    `json:"assignee"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -31,13 +33,14 @@ func ValidStatus(s Status) bool {
 	return false
 }
 
-func NewTicket(title, content string) Ticket {
+func NewTicket(title, content, createdBy string) Ticket {
 	now := time.Now()
 	return Ticket{
 		ID:        uuid.New().String()[:8],
 		Title:     title,
 		Content:   content,
 		Status:    Todo,
+		CreatedBy: createdBy,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}

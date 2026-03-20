@@ -17,7 +17,7 @@ var rmCmd = &cobra.Command{
 			fmt.Printf("Delete ticket %s? Use --force to confirm.\n", args[0])
 			return nil
 		}
-		c := NewClient(serverURL)
+		c := NewClient(serverURL, authToken)
 		if err := c.DeleteTicket(args[0]); err != nil {
 			return err
 		}

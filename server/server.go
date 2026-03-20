@@ -12,21 +12,49 @@ import (
 )
 
 type Server struct {
-	db  *DB
-	hub *Hub
-	mux *http.ServeMux
+	db           *DB
+	hub          *Hub
+	mux          *http.ServeMux
+	secret       string
+	allowedUsers []string
 }
 
-func NewServer(db *DB, hub *Hub) *Server {
+type Option func(*Server)
+
+func WithSecret(secret string) Option {
+	return func(s *Server) { s.secret = secret }
+}
+
+func WithAllowedUsers(users []string) Option {
+	return func(s *Server) { s.allowedUsers = users }
+}
+
+func NewServer(db *DB, hub *Hub, opts ...Option) *Server {
 	s := &Server{db: db, hub: hub, mux: http.NewServeMux()}
+	for _, o := range opts {
+		o(s)
+	}
 	s.mux.HandleFunc("/api/tickets", s.handleTickets)
 	s.mux.HandleFunc("/api/tickets/", s.handleTicket)
 	s.mux.HandleFunc("/api/version", s.handleVersion)
+	s.mux.HandleFunc("/api/auth", s.handleAuth)
 	s.mux.HandleFunc("/releases/", s.handleRelease)
 	s.mux.HandleFunc("/install.sh", s.handleInstallScript)
 	s.mux.HandleFunc("/admin/releases/", s.handleUploadRelease)
 	s.mux.HandleFunc("/ws", s.handleWS)
 	return s
+}
+
+func (s *Server) isAllowedUser(username string) bool {
+	if len(s.allowedUsers) == 0 {
+		return true
+	}
+	for _, u := range s.allowedUsers {
+		if strings.EqualFold(u, username) {
+			return true
+		}
+	}
+	return false
 }
 
 type wsConn struct {
@@ -61,17 +89,28 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.mux.ServeHTTP(w, r)
+	s.authMiddleware(s.mux).ServeHTTP(w, r)
 }
 
 func (s *Server) handleTickets(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		status := r.URL.Query().Get("status")
+		mine := r.URL.Query().Get("mine")
+		username := UsernameFromContext(r.Context())
 		tickets, err := s.db.ListTickets(status)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
+		}
+		if mine == "true" && username != "" {
+			var filtered []model.Ticket
+			for _, t := range tickets {
+				if t.CreatedBy == username || t.Assignee == username {
+					filtered = append(filtered, t)
+				}
+			}
+			tickets = filtered
 		}
 		if tickets == nil {
 			tickets = []model.Ticket{}
@@ -83,12 +122,17 @@ func (s *Server) handleTickets(w http.ResponseWriter, r *http.Request) {
 		var input struct {
 			Title   string `json:"title"`
 			Content string `json:"content"`
+			Assign  string `json:"assignee"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		ticket := model.NewTicket(input.Title, input.Content)
+		username := UsernameFromContext(r.Context())
+		ticket := model.NewTicket(input.Title, input.Content, username)
+		if input.Assign != "" {
+			ticket.Assignee = input.Assign
+		}
 		if err := s.db.CreateTicket(ticket); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

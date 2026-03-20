@@ -15,7 +15,7 @@ func sampleTickets() []model.Ticket {
 }
 
 func TestApp_InitialState(t *testing.T) {
-	app := NewApp("http://localhost:8080")
+	app := NewApp("http://localhost:8080", "")
 	app.SetTickets(sampleTickets())
 
 	if app.ActiveColumn() != 0 {
@@ -30,7 +30,7 @@ func TestApp_InitialState(t *testing.T) {
 }
 
 func TestApp_SwitchColumns(t *testing.T) {
-	app := NewApp("http://localhost:8080")
+	app := NewApp("http://localhost:8080", "")
 	app.SetTickets(sampleTickets())
 
 	app.MoveRight()
@@ -55,7 +55,7 @@ func TestApp_SwitchColumns(t *testing.T) {
 }
 
 func TestApp_SelectedTicket(t *testing.T) {
-	app := NewApp("http://localhost:8080")
+	app := NewApp("http://localhost:8080", "")
 	app.SetTickets(sampleTickets())
 
 	selected := app.SelectedTicket()

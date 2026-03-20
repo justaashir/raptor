@@ -12,7 +12,7 @@ func TestDB_CreateAndGetTicket(t *testing.T) {
 	}
 	defer db.Close()
 
-	ticket := model.NewTicket("Test ticket", "some content")
+	ticket := model.NewTicket("Test ticket", "some content", "alice")
 	err = db.CreateTicket(ticket)
 	if err != nil {
 		t.Fatalf("failed to create ticket: %v", err)
@@ -33,6 +33,9 @@ func TestDB_CreateAndGetTicket(t *testing.T) {
 	}
 	if got.Status != model.Todo {
 		t.Fatalf("expected status %q, got %q", model.Todo, got.Status)
+	}
+	if got.CreatedBy != "alice" {
+		t.Fatalf("expected created_by %q, got %q", "alice", got.CreatedBy)
 	}
 }
 
@@ -59,8 +62,8 @@ func TestDB_ListTickets_Empty(t *testing.T) {
 
 func TestDB_ListTickets_FilterByStatus(t *testing.T) {
 	db := newTestDB(t)
-	t1 := model.NewTicket("Todo task", "")
-	t2 := model.NewTicket("Done task", "")
+	t1 := model.NewTicket("Todo task", "", "")
+	t2 := model.NewTicket("Done task", "", "")
 	t2.Status = model.Done
 	db.CreateTicket(t1)
 	db.CreateTicket(t2)
@@ -79,7 +82,7 @@ func TestDB_ListTickets_FilterByStatus(t *testing.T) {
 
 func TestDB_UpdateTicket(t *testing.T) {
 	db := newTestDB(t)
-	ticket := model.NewTicket("Original", "")
+	ticket := model.NewTicket("Original", "", "")
 	db.CreateTicket(ticket)
 
 	err := db.UpdateTicket(ticket.ID, map[string]any{
@@ -101,7 +104,7 @@ func TestDB_UpdateTicket(t *testing.T) {
 
 func TestDB_DeleteTicket(t *testing.T) {
 	db := newTestDB(t)
-	ticket := model.NewTicket("To delete", "")
+	ticket := model.NewTicket("To delete", "", "")
 	db.CreateTicket(ticket)
 
 	err := db.DeleteTicket(ticket.ID)
@@ -112,5 +115,23 @@ func TestDB_DeleteTicket(t *testing.T) {
 	_, err = db.GetTicket(ticket.ID)
 	if err == nil {
 		t.Fatal("expected error getting deleted ticket")
+	}
+}
+
+func TestDB_AssigneeField(t *testing.T) {
+	db := newTestDB(t)
+	ticket := model.NewTicket("Assigned task", "", "alice")
+	ticket.Assignee = "bob"
+	db.CreateTicket(ticket)
+
+	got, err := db.GetTicket(ticket.ID)
+	if err != nil {
+		t.Fatalf("failed to get ticket: %v", err)
+	}
+	if got.Assignee != "bob" {
+		t.Fatalf("expected assignee %q, got %q", "bob", got.Assignee)
+	}
+	if got.CreatedBy != "alice" {
+		t.Fatalf("expected created_by %q, got %q", "alice", got.CreatedBy)
 	}
 }

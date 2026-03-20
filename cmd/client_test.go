@@ -21,8 +21,8 @@ func TestClient_CreateTicket(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := NewClient(ts.URL)
-	ticket, err := c.CreateTicket("Test", "content")
+	c := NewClient(ts.URL, "")
+	ticket, err := c.CreateTicket("Test", "content", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,8 +40,8 @@ func TestClient_ListTickets(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := NewClient(ts.URL)
-	tickets, err := c.ListTickets("")
+	c := NewClient(ts.URL, "")
+	tickets, err := c.ListTickets("", false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestClient_GetTicket(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := NewClient(ts.URL)
+	c := NewClient(ts.URL, "")
 	ticket, err := c.GetTicket("abc")
 	if err != nil {
 		t.Fatal(err)
@@ -75,7 +75,7 @@ func TestClient_UpdateTicket(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := NewClient(ts.URL)
+	c := NewClient(ts.URL, "")
 	ticket, err := c.UpdateTicket("abc", map[string]any{"title": "Updated"})
 	if err != nil {
 		t.Fatal(err)
@@ -94,8 +94,25 @@ func TestClient_DeleteTicket(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := NewClient(ts.URL)
+	c := NewClient(ts.URL, "")
 	err := c.DeleteTicket("abc")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestClient_AuthHeader(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth := r.Header.Get("Authorization")
+		if auth != "Bearer test-token" {
+			t.Fatalf("expected Bearer test-token, got %q", auth)
+		}
+		json.NewEncoder(w).Encode([]model.Ticket{})
+	}))
+	defer ts.Close()
+
+	c := NewClient(ts.URL, "test-token")
+	_, err := c.ListTickets("", false)
 	if err != nil {
 		t.Fatal(err)
 	}

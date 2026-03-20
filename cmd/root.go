@@ -18,22 +18,42 @@ var (
 	DefaultServer = "http://localhost:8080"
 )
 
-var serverURL string
+var (
+	serverURL string
+	authToken string
+)
 
 var rootCmd = &cobra.Command{
 	Use:   "raptor",
 	Short: "A multiplayer kanban board",
 	Long:  "Raptor is a CLI kanban board with real-time sync.",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		// Skip update check for serve/version/update commands
 		name := cmd.Name()
-		if name == "serve" || name == "version" || name == "update" {
+		// Skip auth + update check for these commands
+		if name == "serve" || name == "version" || name == "update" || name == "login" {
 			return
 		}
+
+		// Load config for token and server URL
+		cfg, err := LoadConfig()
+		if err == nil {
+			if cfg.Token != "" {
+				authToken = cfg.Token
+			}
+			// Use config server if user didn't override via flag
+			if cfg.Server != "" && !cmd.Flags().Changed("server") {
+				serverURL = cfg.Server
+			}
+		}
+
+		if authToken == "" && name != "raptor" {
+			fmt.Fprintln(os.Stderr, "Warning: not logged in. Run `raptor login` to authenticate.")
+		}
+
 		go checkForUpdate()
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		app := tui.NewApp(serverURL)
+		app := tui.NewApp(serverURL, authToken)
 		p := tea.NewProgram(app, tea.WithAltScreen())
 		_, err := p.Run()
 		return err

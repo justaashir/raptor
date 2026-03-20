@@ -4,40 +4,70 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"raptor/model"
 )
 
 type Client struct {
 	baseURL string
+	token   string
 	http    *http.Client
 }
 
-func NewClient(baseURL string) *Client {
-	return &Client{baseURL: baseURL, http: &http.Client{}}
+func NewClient(baseURL, token string) *Client {
+	return &Client{baseURL: baseURL, token: token, http: &http.Client{}}
 }
 
-func (c *Client) CreateTicket(title, content string) (model.Ticket, error) {
-	body, _ := json.Marshal(map[string]string{"title": title, "content": content})
-	resp, err := c.http.Post(c.baseURL+"/api/tickets", "application/json", bytes.NewReader(body))
+func (c *Client) do(req *http.Request) (*http.Response, error) {
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode == http.StatusUnauthorized {
+		resp.Body.Close()
+		return nil, fmt.Errorf("unauthorized — run `raptor login` to authenticate")
+	}
+	return resp, nil
+}
+
+func (c *Client) CreateTicket(title, content, assignee string) (model.Ticket, error) {
+	payload := map[string]string{"title": title, "content": content}
+	if assignee != "" {
+		payload["assignee"] = assignee
+	}
+	body, _ := json.Marshal(payload)
+	req, _ := http.NewRequest("POST", c.baseURL+"/api/tickets", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.do(req)
 	if err != nil {
 		return model.Ticket{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated {
-		return model.Ticket{}, fmt.Errorf("unexpected status: %d", resp.StatusCode)
+		msg, _ := io.ReadAll(resp.Body)
+		return model.Ticket{}, fmt.Errorf("unexpected status: %d: %s", resp.StatusCode, msg)
 	}
 	var ticket model.Ticket
 	json.NewDecoder(resp.Body).Decode(&ticket)
 	return ticket, nil
 }
 
-func (c *Client) ListTickets(status string) ([]model.Ticket, error) {
+func (c *Client) ListTickets(status string, mine bool) ([]model.Ticket, error) {
 	url := c.baseURL + "/api/tickets"
+	sep := "?"
 	if status != "" {
-		url += "?status=" + status
+		url += sep + "status=" + status
+		sep = "&"
 	}
-	resp, err := c.http.Get(url)
+	if mine {
+		url += sep + "mine=true"
+	}
+	req, _ := http.NewRequest("GET", url, nil)
+	resp, err := c.do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +78,8 @@ func (c *Client) ListTickets(status string) ([]model.Ticket, error) {
 }
 
 func (c *Client) GetTicket(id string) (model.Ticket, error) {
-	resp, err := c.http.Get(c.baseURL + "/api/tickets/" + id)
+	req, _ := http.NewRequest("GET", c.baseURL+"/api/tickets/"+id, nil)
+	resp, err := c.do(req)
 	if err != nil {
 		return model.Ticket{}, err
 	}
@@ -65,7 +96,7 @@ func (c *Client) UpdateTicket(id string, fields map[string]any) (model.Ticket, e
 	body, _ := json.Marshal(fields)
 	req, _ := http.NewRequest("PATCH", c.baseURL+"/api/tickets/"+id, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.http.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return model.Ticket{}, err
 	}
@@ -77,7 +108,7 @@ func (c *Client) UpdateTicket(id string, fields map[string]any) (model.Ticket, e
 
 func (c *Client) DeleteTicket(id string) error {
 	req, _ := http.NewRequest("DELETE", c.baseURL+"/api/tickets/"+id, nil)
-	resp, err := c.http.Do(req)
+	resp, err := c.do(req)
 	if err != nil {
 		return err
 	}

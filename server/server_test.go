@@ -60,7 +60,7 @@ func TestServer_CreateAndListTickets(t *testing.T) {
 func TestServer_GetTicket(t *testing.T) {
 	srv := newTestServer(t)
 
-	ticket := model.NewTicket("Get me", "content")
+	ticket := model.NewTicket("Get me", "content", "")
 	srv.db.CreateTicket(ticket)
 
 	req := httptest.NewRequest("GET", "/api/tickets/"+ticket.ID, nil)
@@ -81,7 +81,7 @@ func TestServer_GetTicket(t *testing.T) {
 func TestServer_UpdateTicket(t *testing.T) {
 	srv := newTestServer(t)
 
-	ticket := model.NewTicket("Original", "")
+	ticket := model.NewTicket("Original", "", "")
 	srv.db.CreateTicket(ticket)
 
 	body := `{"title":"Updated","status":"done"}`
@@ -102,7 +102,7 @@ func TestServer_UpdateTicket(t *testing.T) {
 func TestServer_DeleteTicket(t *testing.T) {
 	srv := newTestServer(t)
 
-	ticket := model.NewTicket("To delete", "")
+	ticket := model.NewTicket("To delete", "", "")
 	srv.db.CreateTicket(ticket)
 
 	req := httptest.NewRequest("DELETE", "/api/tickets/"+ticket.ID, nil)
@@ -128,5 +128,64 @@ func TestServer_GetTicket_NotFound(t *testing.T) {
 
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestServer_CreatedByFromAuth(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
+	token := GenerateToken("alice", "secret")
+
+	body := `{"title":"Auth ticket","content":""}`
+	req := httptest.NewRequest("POST", "/api/tickets", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var created model.Ticket
+	json.NewDecoder(w.Body).Decode(&created)
+	if created.CreatedBy != "alice" {
+		t.Fatalf("expected created_by=alice, got %q", created.CreatedBy)
+	}
+}
+
+func TestServer_ListMine(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{"alice", "bob"})
+	tokenAlice := GenerateToken("alice", "secret")
+	tokenBob := GenerateToken("bob", "secret")
+
+	// Alice creates a ticket
+	body := `{"title":"Alice ticket"}`
+	req := httptest.NewRequest("POST", "/api/tickets", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenAlice)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	// Bob creates a ticket
+	body = `{"title":"Bob ticket"}`
+	req = httptest.NewRequest("POST", "/api/tickets", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenBob)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	// Alice lists mine
+	req = httptest.NewRequest("GET", "/api/tickets?mine=true", nil)
+	req.Header.Set("Authorization", "Bearer "+tokenAlice)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	var tickets []model.Ticket
+	json.NewDecoder(w.Body).Decode(&tickets)
+	if len(tickets) != 1 {
+		t.Fatalf("expected 1 ticket for alice, got %d", len(tickets))
+	}
+	if tickets[0].Title != "Alice ticket" {
+		t.Fatalf("expected Alice ticket, got %q", tickets[0].Title)
 	}
 }

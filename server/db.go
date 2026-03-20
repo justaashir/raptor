@@ -24,6 +24,8 @@ func NewDB(dsn string) (*DB, error) {
 		title TEXT NOT NULL,
 		content TEXT DEFAULT '',
 		status TEXT NOT NULL DEFAULT 'todo',
+		created_by TEXT DEFAULT '',
+		assignee TEXT DEFAULT '',
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	)`)
@@ -31,6 +33,9 @@ func NewDB(dsn string) (*DB, error) {
 		conn.Close()
 		return nil, err
 	}
+	// Migrate existing tables
+	conn.Exec(`ALTER TABLE tickets ADD COLUMN created_by TEXT DEFAULT ''`)
+	conn.Exec(`ALTER TABLE tickets ADD COLUMN assignee TEXT DEFAULT ''`)
 	return &DB{conn: conn}, nil
 }
 
@@ -40,14 +45,14 @@ func (db *DB) Close() error {
 
 func (db *DB) CreateTicket(t model.Ticket) error {
 	_, err := db.conn.Exec(
-		`INSERT INTO tickets (id, title, content, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		t.ID, t.Title, t.Content, t.Status, t.CreatedAt, t.UpdatedAt,
+		`INSERT INTO tickets (id, title, content, status, created_by, assignee, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		t.ID, t.Title, t.Content, t.Status, t.CreatedBy, t.Assignee, t.CreatedAt, t.UpdatedAt,
 	)
 	return err
 }
 
 func (db *DB) ListTickets(status string) ([]model.Ticket, error) {
-	query := `SELECT id, title, content, status, created_at, updated_at FROM tickets`
+	query := `SELECT id, title, content, status, created_by, assignee, created_at, updated_at FROM tickets`
 	var args []any
 	if status != "" {
 		query += ` WHERE status = ?`
@@ -62,7 +67,7 @@ func (db *DB) ListTickets(status string) ([]model.Ticket, error) {
 	var tickets []model.Ticket
 	for rows.Next() {
 		var t model.Ticket
-		if err := rows.Scan(&t.ID, &t.Title, &t.Content, &t.Status, &t.CreatedAt, &t.UpdatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.Title, &t.Content, &t.Status, &t.CreatedBy, &t.Assignee, &t.CreatedAt, &t.UpdatedAt); err != nil {
 			return nil, err
 		}
 		tickets = append(tickets, t)
@@ -98,7 +103,7 @@ func (db *DB) DeleteTicket(id string) error {
 func (db *DB) GetTicket(id string) (model.Ticket, error) {
 	var t model.Ticket
 	err := db.conn.QueryRow(
-		`SELECT id, title, content, status, created_at, updated_at FROM tickets WHERE id = ?`, id,
-	).Scan(&t.ID, &t.Title, &t.Content, &t.Status, &t.CreatedAt, &t.UpdatedAt)
+		`SELECT id, title, content, status, created_by, assignee, created_at, updated_at FROM tickets WHERE id = ?`, id,
+	).Scan(&t.ID, &t.Title, &t.Content, &t.Status, &t.CreatedBy, &t.Assignee, &t.CreatedAt, &t.UpdatedAt)
 	return t, err
 }

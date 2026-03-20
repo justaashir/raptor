@@ -6,7 +6,7 @@ import (
 )
 
 func TestNewTicket_HasIDTitleAndStatus(t *testing.T) {
-	ticket := NewTicket("My first task", "")
+	ticket := NewTicket("My first task", "", "alice")
 
 	if ticket.ID == "" {
 		t.Fatal("expected ticket to have an ID")
@@ -19,6 +19,9 @@ func TestNewTicket_HasIDTitleAndStatus(t *testing.T) {
 	}
 	if ticket.Status != Todo {
 		t.Fatalf("expected status %q, got %q", Todo, ticket.Status)
+	}
+	if ticket.CreatedBy != "alice" {
+		t.Fatalf("expected created_by %q, got %q", "alice", ticket.CreatedBy)
 	}
 	if ticket.CreatedAt.IsZero() {
 		t.Fatal("expected CreatedAt to be set")

@@ -24,6 +24,7 @@ const (
 
 type App struct {
 	serverURL    string
+	token        string
 	columns      [3]*Column
 	activeCol    int
 	state        viewState
@@ -38,9 +39,10 @@ type ticketsMsg []model.Ticket
 type errMsg error
 type wsMsg struct{}
 
-func NewApp(serverURL string) *App {
+func NewApp(serverURL, token string) *App {
 	app := &App{
 		serverURL: serverURL,
+		token:     token,
 		columns: [3]*Column{
 			NewColumn("Todo", model.Todo, nil),
 			NewColumn("In Progress", model.InProgress, nil),
@@ -199,7 +201,7 @@ func (a *App) View() string {
 // Commands
 
 func (a *App) fetchTickets() tea.Msg {
-	resp, err := newHTTPClient(a.serverURL).ListTickets("")
+	resp, err := newHTTPClient(a.serverURL, a.token).ListTickets("")
 	if err != nil {
 		return errMsg(err)
 	}
@@ -236,7 +238,7 @@ func (a *App) cycleStatus(t *model.Ticket) tea.Cmd {
 			model.Done:       model.Todo,
 		}
 		newStatus := next[t.Status]
-		_, err := newHTTPClient(a.serverURL).UpdateTicket(t.ID, map[string]any{"status": string(newStatus)})
+		_, err := newHTTPClient(a.serverURL, a.token).UpdateTicket(t.ID, map[string]any{"status": string(newStatus)})
 		if err != nil {
 			return errMsg(err)
 		}
@@ -249,9 +251,9 @@ func (a *App) addTicket() tea.Msg {
 	if err != nil || title == "" {
 		return a.fetchTickets()
 	}
-	client := newHTTPClient(a.serverURL)
+	client := newHTTPClient(a.serverURL, a.token)
 	body, _ := json.Marshal(map[string]string{"title": title, "content": content})
-	_, postErr := httpPost(client.baseURL+"/api/tickets", body)
+	_, postErr := httpPost(client.baseURL+"/api/tickets", body, a.token)
 	if postErr != nil {
 		return errMsg(postErr)
 	}
@@ -272,7 +274,7 @@ func (a *App) editTicket(t *model.Ticket) tea.Cmd {
 			fields["content"] = content
 		}
 		if len(fields) > 0 {
-			_, err := newHTTPClient(a.serverURL).UpdateTicket(t.ID, fields)
+			_, err := newHTTPClient(a.serverURL, a.token).UpdateTicket(t.ID, fields)
 			if err != nil {
 				return errMsg(err)
 			}
@@ -283,7 +285,7 @@ func (a *App) editTicket(t *model.Ticket) tea.Cmd {
 
 func (a *App) deleteTicket(id string) tea.Cmd {
 	return func() tea.Msg {
-		err := newHTTPClient(a.serverURL).DeleteTicket(id)
+		err := newHTTPClient(a.serverURL, a.token).DeleteTicket(id)
 		if err != nil {
 			return errMsg(err)
 		}
@@ -326,10 +328,11 @@ var keys = keyMap{
 
 type httpClient struct {
 	baseURL string
+	token   string
 }
 
-func newHTTPClient(baseURL string) *httpClient {
-	return &httpClient{baseURL: baseURL}
+func newHTTPClient(baseURL, token string) *httpClient {
+	return &httpClient{baseURL: baseURL, token: token}
 }
 
 func (c *httpClient) ListTickets(status string) ([]model.Ticket, error) {
@@ -337,7 +340,7 @@ func (c *httpClient) ListTickets(status string) ([]model.Ticket, error) {
 	if status != "" {
 		url += "?status=" + status
 	}
-	resp, err := httpGet(url)
+	resp, err := httpGet(url, c.token)
 	if err != nil {
 		return nil, err
 	}
@@ -348,7 +351,7 @@ func (c *httpClient) ListTickets(status string) ([]model.Ticket, error) {
 
 func (c *httpClient) UpdateTicket(id string, fields map[string]any) (model.Ticket, error) {
 	body, _ := json.Marshal(fields)
-	resp, err := httpPatch(c.baseURL+"/api/tickets/"+id, body)
+	resp, err := httpPatch(c.baseURL+"/api/tickets/"+id, body, c.token)
 	if err != nil {
 		return model.Ticket{}, err
 	}
@@ -358,5 +361,5 @@ func (c *httpClient) UpdateTicket(id string, fields map[string]any) (model.Ticke
 }
 
 func (c *httpClient) DeleteTicket(id string) error {
-	return httpDelete(c.baseURL + "/api/tickets/" + id)
+	return httpDelete(c.baseURL+"/api/tickets/"+id, c.token)
 }

@@ -6,6 +6,7 @@ import (
 	"os"
 	"raptor/server"
 	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -41,7 +42,21 @@ var serveCmd = &cobra.Command{
 		hub := server.NewHub()
 		go hub.Run()
 
-		srv := server.NewServer(db, hub)
+		var opts []server.Option
+		if secret := os.Getenv("RAPTOR_SECRET"); secret != "" {
+			opts = append(opts, server.WithSecret(secret))
+			fmt.Println("Auth enabled")
+		}
+		if users := os.Getenv("RAPTOR_USERS"); users != "" {
+			list := strings.Split(users, ",")
+			for i := range list {
+				list[i] = strings.TrimSpace(list[i])
+			}
+			opts = append(opts, server.WithAllowedUsers(list))
+			fmt.Printf("Allowed users: %s\n", users)
+		}
+
+		srv := server.NewServer(db, hub, opts...)
 		addr := fmt.Sprintf(":%d", servePort)
 		fmt.Printf("Raptor server listening on %s\n", addr)
 		return http.ListenAndServe(addr, srv)

@@ -6,8 +6,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var editTitle string
-var editContent string
+var (
+	editTitle   string
+	editContent string
+	editAssign  string
+)
 
 var editCmd = &cobra.Command{
 	Use:   "edit <id>",
@@ -21,10 +24,13 @@ var editCmd = &cobra.Command{
 		if editContent != "" {
 			fields["content"] = editContent
 		}
-		if len(fields) == 0 {
-			return fmt.Errorf("specify --title or --content to edit")
+		if editAssign != "" {
+			fields["assignee"] = editAssign
 		}
-		c := NewClient(serverURL)
+		if len(fields) == 0 {
+			return fmt.Errorf("specify --title, --content, or --assign to edit")
+		}
+		c := NewClient(serverURL, authToken)
 		ticket, err := c.UpdateTicket(args[0], fields)
 		if err != nil {
 			return err
@@ -37,5 +43,6 @@ var editCmd = &cobra.Command{
 func init() {
 	editCmd.Flags().StringVarP(&editTitle, "title", "t", "", "new title")
 	editCmd.Flags().StringVarP(&editContent, "content", "c", "", "new content")
+	editCmd.Flags().StringVarP(&editAssign, "assign", "a", "", "assign to user")
 	rootCmd.AddCommand(editCmd)
 }

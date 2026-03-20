@@ -15,12 +15,19 @@ var (
 
 func RenderTicketDetail(t model.Ticket) string {
 	title := detailTitleStyle.Render(t.Title)
-	meta := detailMetaStyle.Render(fmt.Sprintf(
+	metaStr := fmt.Sprintf(
 		"ID: %s  |  Status: %s  |  Created: %s  |  Updated: %s",
 		t.ID, t.Status,
 		t.CreatedAt.Format("2006-01-02 15:04"),
 		t.UpdatedAt.Format("2006-01-02 15:04"),
-	))
+	)
+	if t.CreatedBy != "" {
+		metaStr += fmt.Sprintf("  |  By: %s", t.CreatedBy)
+	}
+	if t.Assignee != "" {
+		metaStr += fmt.Sprintf("  |  Assignee: %s", t.Assignee)
+	}
+	meta := detailMetaStyle.Render(metaStr)
 
 	var content string
 	if t.Content != "" {

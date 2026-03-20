@@ -7,7 +7,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var listStatus string
+var (
+	listStatus string
+	listMine   bool
+)
 
 var statusStyle = map[string]lipgloss.Style{
 	"todo":        lipgloss.NewStyle().Foreground(lipgloss.Color("12")),
@@ -19,8 +22,8 @@ var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List tickets",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c := NewClient(serverURL)
-		tickets, err := c.ListTickets(listStatus)
+		c := NewClient(serverURL, authToken)
+		tickets, err := c.ListTickets(listStatus, listMine)
 		if err != nil {
 			return err
 		}
@@ -30,7 +33,14 @@ var listCmd = &cobra.Command{
 		}
 		for _, t := range tickets {
 			style := statusStyle[string(t.Status)]
-			fmt.Printf("%s  %s  %s\n", t.ID, style.Render(string(t.Status)), t.Title)
+			line := fmt.Sprintf("%s  %s  %s", t.ID, style.Render(string(t.Status)), t.Title)
+			if t.Assignee != "" {
+				line += fmt.Sprintf("  [@%s]", t.Assignee)
+			}
+			if t.CreatedBy != "" {
+				line += fmt.Sprintf("  (by %s)", t.CreatedBy)
+			}
+			fmt.Println(line)
 		}
 		return nil
 	},
@@ -38,5 +48,6 @@ var listCmd = &cobra.Command{
 
 func init() {
 	listCmd.Flags().StringVarP(&listStatus, "status", "s", "", "filter by status (todo, in_progress, done)")
+	listCmd.Flags().BoolVar(&listMine, "mine", false, "show only my tickets")
 	rootCmd.AddCommand(listCmd)
 }
