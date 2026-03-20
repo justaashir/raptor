@@ -131,6 +131,66 @@ func TestServer_GetTicket_NotFound(t *testing.T) {
 	}
 }
 
+func TestServer_CreateWorkspace(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
+	token := GenerateToken("alice", "secret")
+
+	body := `{"name":"My Team"}`
+	req := httptest.NewRequest("POST", "/api/workspaces/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var ws struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	json.NewDecoder(w.Body).Decode(&ws)
+	if ws.Name != "My Team" {
+		t.Fatalf("expected name My Team, got %q", ws.Name)
+	}
+	if ws.ID == "" {
+		t.Fatal("expected workspace to have an ID")
+	}
+}
+
+func TestServer_ListWorkspaces(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
+	token := GenerateToken("alice", "secret")
+
+	// Create a workspace
+	body := `{"name":"Team A"}`
+	req := httptest.NewRequest("POST", "/api/workspaces/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	// List workspaces
+	req = httptest.NewRequest("GET", "/api/workspaces/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var workspaces []struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	}
+	json.NewDecoder(w.Body).Decode(&workspaces)
+	if len(workspaces) != 1 {
+		t.Fatalf("expected 1 workspace, got %d", len(workspaces))
+	}
+}
+
 func TestServer_CreatedByFromAuth(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
 	token := GenerateToken("alice", "secret")
