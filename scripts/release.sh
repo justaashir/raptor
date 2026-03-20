@@ -55,13 +55,15 @@ for platform in $PLATFORMS; do
     GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=0 go build -ldflags "$LDFLAGS" -o "$DIST_DIR/raptor-${GOOS}-${GOARCH}" "$ROOT_DIR"
 done
 
-# Upload to Railway server
+# Upload to Railway server (parallel)
+echo "Uploading all platforms..."
 for platform in $PLATFORMS; do
     GOOS="${platform%/*}"
     GOARCH="${platform#*/}"
-    echo "Uploading $GOOS/$GOARCH..."
-    curl -fsSL -X PUT --data-binary "@$DIST_DIR/raptor-${GOOS}-${GOARCH}" "${SERVER}/admin/releases/${GOOS}/${GOARCH}"
+    curl -fsSL -X PUT --data-binary "@$DIST_DIR/raptor-${GOOS}-${GOARCH}" "${SERVER}/admin/releases/${GOOS}/${GOARCH}" &
 done
+wait
+echo "All uploads complete."
 
 # Everything succeeded — now commit the version bump
 echo "$VERSION" > "$ROOT_DIR/VERSION"
