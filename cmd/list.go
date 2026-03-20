@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"raptor/client"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -25,7 +26,7 @@ var listCmd = &cobra.Command{
 		if err := requireBoard(); err != nil {
 			return err
 		}
-		c := NewScopedClient(serverURL, authToken, activeWS, activeBoard)
+		c := client.NewScoped(serverURL, authToken, activeWS, activeBoard)
 		tickets, err := c.ListTickets(listStatus, listMine)
 		if err != nil {
 			return err

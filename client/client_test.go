@@ -1,4 +1,4 @@
-package cmd
+package client
 
 import (
 	"encoding/json"
@@ -7,6 +7,20 @@ import (
 	"raptor/model"
 	"testing"
 )
+
+func TestNew_creates_client_with_base_url_and_token(t *testing.T) {
+	c := New("http://localhost:8080", "tok")
+	if c == nil {
+		t.Fatal("expected non-nil client")
+	}
+}
+
+func TestNewScoped_creates_client_with_workspace_and_board(t *testing.T) {
+	c := NewScoped("http://localhost:8080", "tok", "ws1", "bd1")
+	if c == nil {
+		t.Fatal("expected non-nil client")
+	}
+}
 
 func TestClient_CreateTicket(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -22,7 +36,7 @@ func TestClient_CreateTicket(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := NewScopedClient(ts.URL, "", "ws1", "bd1")
+	c := NewScoped(ts.URL, "", "ws1", "bd1")
 	ticket, err := c.CreateTicket("Test", "content", "")
 	if err != nil {
 		t.Fatal(err)
@@ -41,7 +55,7 @@ func TestClient_ListTickets(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := NewScopedClient(ts.URL, "", "ws1", "bd1")
+	c := NewScoped(ts.URL, "", "ws1", "bd1")
 	tickets, err := c.ListTickets("", false)
 	if err != nil {
 		t.Fatal(err)
@@ -57,7 +71,7 @@ func TestClient_GetTicket(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := NewScopedClient(ts.URL, "", "ws1", "bd1")
+	c := NewScoped(ts.URL, "", "ws1", "bd1")
 	ticket, err := c.GetTicket("abc")
 	if err != nil {
 		t.Fatal(err)
@@ -76,7 +90,7 @@ func TestClient_UpdateTicket(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := NewScopedClient(ts.URL, "", "ws1", "bd1")
+	c := NewScoped(ts.URL, "", "ws1", "bd1")
 	ticket, err := c.UpdateTicket("abc", map[string]any{"title": "Updated"})
 	if err != nil {
 		t.Fatal(err)
@@ -95,7 +109,7 @@ func TestClient_DeleteTicket(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := NewScopedClient(ts.URL, "", "ws1", "bd1")
+	c := NewScoped(ts.URL, "", "ws1", "bd1")
 	err := c.DeleteTicket("abc")
 	if err != nil {
 		t.Fatal(err)
@@ -112,7 +126,7 @@ func TestClient_AuthHeader(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := NewScopedClient(ts.URL, "test-token", "ws1", "bd1")
+	c := NewScoped(ts.URL, "test-token", "ws1", "bd1")
 	_, err := c.ListTickets("", false)
 	if err != nil {
 		t.Fatal(err)
@@ -127,7 +141,7 @@ func TestClient_ScopedURLs(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := NewScopedClient(ts.URL, "", "ws1", "bd1")
+	c := NewScoped(ts.URL, "", "ws1", "bd1")
 	c.ListTickets("", false)
 	expected := "/api/workspaces/ws1/boards/bd1/tickets"
 	if gotPath != expected {
@@ -145,7 +159,7 @@ func TestClient_CreateWorkspace(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := NewClient(ts.URL, "")
+	c := New(ts.URL, "")
 	ws, err := c.CreateWorkspace("Team")
 	if err != nil {
 		t.Fatal(err)
@@ -161,7 +175,7 @@ func TestClient_ListWorkspaces(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := NewClient(ts.URL, "")
+	c := New(ts.URL, "")
 	workspaces, err := c.ListWorkspaces()
 	if err != nil {
 		t.Fatal(err)
@@ -181,7 +195,7 @@ func TestClient_CreateBoard(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	c := NewClient(ts.URL, "")
+	c := New(ts.URL, "")
 	bd, err := c.CreateBoard("ws1", "Sprint")
 	if err != nil {
 		t.Fatal(err)

@@ -1,4 +1,4 @@
-package cmd
+package client
 
 import (
 	"bytes"
@@ -17,11 +17,11 @@ type Client struct {
 	http      *http.Client
 }
 
-func NewClient(baseURL, token string) *Client {
+func New(baseURL, token string) *Client {
 	return &Client{baseURL: baseURL, token: token, http: &http.Client{}}
 }
 
-func NewScopedClient(baseURL, token, workspace, board string) *Client {
+func NewScoped(baseURL, token, workspace, board string) *Client {
 	return &Client{baseURL: baseURL, token: token, workspace: workspace, board: board, http: &http.Client{}}
 }
 
@@ -40,7 +40,7 @@ func (c *Client) do(req *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
-func (c *Client) ticketsURL() string {
+func (c *Client) TicketsURL() string {
 	return fmt.Sprintf("%s/api/workspaces/%s/boards/%s/tickets", c.baseURL, c.workspace, c.board)
 }
 
@@ -50,7 +50,7 @@ func (c *Client) CreateTicket(title, content, assignee string) (model.Ticket, er
 		payload["assignee"] = assignee
 	}
 	body, _ := json.Marshal(payload)
-	req, _ := http.NewRequest("POST", c.ticketsURL(), bytes.NewReader(body))
+	req, _ := http.NewRequest("POST", c.TicketsURL(), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.do(req)
 	if err != nil {
@@ -67,7 +67,7 @@ func (c *Client) CreateTicket(title, content, assignee string) (model.Ticket, er
 }
 
 func (c *Client) ListTickets(status string, mine bool) ([]model.Ticket, error) {
-	url := c.ticketsURL()
+	url := c.TicketsURL()
 	sep := "?"
 	if status != "" {
 		url += sep + "status=" + status
@@ -88,7 +88,7 @@ func (c *Client) ListTickets(status string, mine bool) ([]model.Ticket, error) {
 }
 
 func (c *Client) GetTicket(id string) (model.Ticket, error) {
-	req, _ := http.NewRequest("GET", c.ticketsURL()+"/"+id, nil)
+	req, _ := http.NewRequest("GET", c.TicketsURL()+"/"+id, nil)
 	resp, err := c.do(req)
 	if err != nil {
 		return model.Ticket{}, err
@@ -104,7 +104,7 @@ func (c *Client) GetTicket(id string) (model.Ticket, error) {
 
 func (c *Client) UpdateTicket(id string, fields map[string]any) (model.Ticket, error) {
 	body, _ := json.Marshal(fields)
-	req, _ := http.NewRequest("PATCH", c.ticketsURL()+"/"+id, bytes.NewReader(body))
+	req, _ := http.NewRequest("PATCH", c.TicketsURL()+"/"+id, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.do(req)
 	if err != nil {
@@ -117,7 +117,7 @@ func (c *Client) UpdateTicket(id string, fields map[string]any) (model.Ticket, e
 }
 
 func (c *Client) DeleteTicket(id string) error {
-	req, _ := http.NewRequest("DELETE", c.ticketsURL()+"/"+id, nil)
+	req, _ := http.NewRequest("DELETE", c.TicketsURL()+"/"+id, nil)
 	resp, err := c.do(req)
 	if err != nil {
 		return err

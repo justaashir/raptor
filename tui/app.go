@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"raptor/client"
 	"raptor/model"
 	"strings"
 
@@ -287,8 +288,8 @@ func (a *App) viewBoardSelector() string {
 // Commands
 
 func (a *App) fetchTickets() tea.Msg {
-	client := newHTTPClient(a.serverURL, a.token, a.workspace, a.board)
-	resp, err := client.ListTickets("")
+	c := client.NewScoped(a.serverURL, a.token, a.workspace, a.board)
+	resp, err := c.ListTickets("", false)
 	if err != nil {
 		return errMsg(err)
 	}
@@ -296,13 +297,12 @@ func (a *App) fetchTickets() tea.Msg {
 }
 
 func (a *App) fetchBoards() tea.Msg {
-	// Fetch workspaces first, then boards from first workspace
-	wsResp, err := httpGet(a.serverURL+"/api/workspaces/", a.token)
+	c := client.New(a.serverURL, a.token)
+
+	workspaces, err := c.ListWorkspaces()
 	if err != nil {
 		return errMsg(err)
 	}
-	var workspaces []model.Workspace
-	json.Unmarshal(wsResp, &workspaces)
 
 	if len(workspaces) == 0 {
 		return errMsg(fmt.Errorf("no workspaces found"))
@@ -319,12 +319,10 @@ func (a *App) fetchBoards() tea.Msg {
 		}
 	}
 
-	boardsResp, err := httpGet(a.serverURL+"/api/workspaces/"+ws.ID+"/boards", a.token)
+	boards, err := c.ListBoards(ws.ID)
 	if err != nil {
 		return errMsg(err)
 	}
-	var boards []model.Board
-	json.Unmarshal(boardsResp, &boards)
 
 	// If exactly one workspace and one board, auto-select
 	if len(workspaces) == 1 && len(boards) == 1 {
@@ -369,8 +367,8 @@ func (a *App) cycleStatus(t *model.Ticket) tea.Cmd {
 			model.Done:       model.Todo,
 		}
 		newStatus := next[t.Status]
-		client := newHTTPClient(a.serverURL, a.token, a.workspace, a.board)
-		_, err := client.UpdateTicket(t.ID, map[string]any{"status": string(newStatus)})
+		c := client.NewScoped(a.serverURL, a.token, a.workspace, a.board)
+		_, err := c.UpdateTicket(t.ID, map[string]any{"status": string(newStatus)})
 		if err != nil {
 			return errMsg(err)
 		}
@@ -383,11 +381,10 @@ func (a *App) addTicket() tea.Msg {
 	if err != nil || title == "" {
 		return a.fetchTickets()
 	}
-	client := newHTTPClient(a.serverURL, a.token, a.workspace, a.board)
-	body, _ := json.Marshal(map[string]string{"title": title, "content": content})
-	_, postErr := httpPost(client.ticketsURL(), body, a.token)
-	if postErr != nil {
-		return errMsg(postErr)
+	c := client.NewScoped(a.serverURL, a.token, a.workspace, a.board)
+	_, createErr := c.CreateTicket(title, content, "")
+	if createErr != nil {
+		return errMsg(createErr)
 	}
 	return a.fetchTickets()
 }
@@ -406,8 +403,8 @@ func (a *App) editTicket(t *model.Ticket) tea.Cmd {
 			fields["content"] = content
 		}
 		if len(fields) > 0 {
-			client := newHTTPClient(a.serverURL, a.token, a.workspace, a.board)
-			_, err := client.UpdateTicket(t.ID, fields)
+			c := client.NewScoped(a.serverURL, a.token, a.workspace, a.board)
+			_, err := c.UpdateTicket(t.ID, fields)
 			if err != nil {
 				return errMsg(err)
 			}
@@ -418,8 +415,8 @@ func (a *App) editTicket(t *model.Ticket) tea.Cmd {
 
 func (a *App) deleteTicket(id string) tea.Cmd {
 	return func() tea.Msg {
-		client := newHTTPClient(a.serverURL, a.token, a.workspace, a.board)
-		err := client.DeleteTicket(id)
+		c := client.NewScoped(a.serverURL, a.token, a.workspace, a.board)
+		err := c.DeleteTicket(id)
 		if err != nil {
 			return errMsg(err)
 		}
@@ -460,48 +457,3 @@ var keys = keyMap{
 	SwitchBoard: key.NewBinding(key.WithKeys("b")),
 }
 
-// HTTP client adapter (reuses logic but avoids import cycle with cmd)
-
-type httpClient struct {
-	baseURL   string
-	token     string
-	workspace string
-	board     string
-}
-
-func newHTTPClient(baseURL, token, workspace, board string) *httpClient {
-	return &httpClient{baseURL: baseURL, token: token, workspace: workspace, board: board}
-}
-
-func (c *httpClient) ticketsURL() string {
-	return fmt.Sprintf("%s/api/workspaces/%s/boards/%s/tickets", c.baseURL, c.workspace, c.board)
-}
-
-func (c *httpClient) ListTickets(status string) ([]model.Ticket, error) {
-	url := c.ticketsURL()
-	if status != "" {
-		url += "?status=" + status
-	}
-	resp, err := httpGet(url, c.token)
-	if err != nil {
-		return nil, err
-	}
-	var tickets []model.Ticket
-	json.Unmarshal(resp, &tickets)
-	return tickets, nil
-}
-
-func (c *httpClient) UpdateTicket(id string, fields map[string]any) (model.Ticket, error) {
-	body, _ := json.Marshal(fields)
-	resp, err := httpPatch(c.ticketsURL()+"/"+id, body, c.token)
-	if err != nil {
-		return model.Ticket{}, err
-	}
-	var ticket model.Ticket
-	json.Unmarshal(resp, &ticket)
-	return ticket, nil
-}
-
-func (c *httpClient) DeleteTicket(id string) error {
-	return httpDelete(c.ticketsURL()+"/"+id, c.token)
-}
