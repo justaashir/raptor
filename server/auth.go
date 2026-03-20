@@ -30,8 +30,8 @@ func ValidateToken(tokenStr, secret string) (string, error) {
 		}
 		return []byte(secret), nil
 	})
-	if err != nil {
-		return "", fmt.Errorf("invalid token: %w", err)
+	if err != nil || !token.Valid {
+		return "", fmt.Errorf("invalid token")
 	}
 	sub, err := token.Claims.GetSubject()
 	if err != nil || sub == "" {
@@ -53,7 +53,7 @@ func (s *Server) authMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		token := strings.TrimPrefix(auth, "Bearer ")
 		user, err := ValidateToken(token, s.secret)
 		if err != nil {
-			return c.JSON(http.StatusUnauthorized, map[string]string{"error": err.Error()})
+			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		}
 		c.Set("username", user)
 		return next(c)
