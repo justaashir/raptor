@@ -1,11 +1,14 @@
 package server
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"net/http"
 	"raptor/model"
 	"strings"
+
+	"nhooyr.io/websocket"
 )
 
 type Server struct {
@@ -18,7 +21,39 @@ func NewServer(db *DB, hub *Hub) *Server {
 	s := &Server{db: db, hub: hub, mux: http.NewServeMux()}
 	s.mux.HandleFunc("/api/tickets", s.handleTickets)
 	s.mux.HandleFunc("/api/tickets/", s.handleTicket)
+	s.mux.HandleFunc("/ws", s.handleWS)
 	return s
+}
+
+type wsConn struct {
+	conn *websocket.Conn
+	ctx  context.Context
+}
+
+func (w *wsConn) Send(msg []byte) error {
+	return w.conn.Write(w.ctx, websocket.MessageText, msg)
+}
+
+func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
+	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		InsecureSkipVerify: true,
+	})
+	if err != nil {
+		return
+	}
+	defer c.Close(websocket.StatusNormalClosure, "")
+
+	wc := &wsConn{conn: c, ctx: r.Context()}
+	s.hub.Register(wc)
+	defer s.hub.Unregister(wc)
+
+	// Keep connection alive by reading (blocks until client disconnects)
+	for {
+		_, _, err := c.Read(r.Context())
+		if err != nil {
+			return
+		}
+	}
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
