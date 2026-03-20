@@ -12,7 +12,7 @@ type Workspace struct {
 type WorkspaceMember struct {
 	WorkspaceID string    `json:"workspace_id" gorm:"primaryKey;constraint:OnDelete:CASCADE"`
 	Username    string    `json:"username" gorm:"primaryKey"`
-	Role        string    `json:"role" gorm:"not null;check:role IN ('owner','admin','member')"`
+	Role        string    `json:"role" gorm:"not null;check:role IN ('owner','member')"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 
@@ -20,19 +20,52 @@ type Board struct {
 	ID          string    `json:"id" gorm:"primaryKey"`
 	WorkspaceID string    `json:"workspace_id" gorm:"not null;constraint:OnDelete:CASCADE"`
 	Name        string    `json:"name" gorm:"not null"`
+	Statuses    string    `json:"statuses" gorm:"not null;default:'todo,in_progress,done'"`
 	CreatedBy   string    `json:"created_by" gorm:"not null"`
 	CreatedAt   time.Time `json:"created_at"`
 }
 
-type BoardMember struct {
-	BoardID   string    `json:"board_id" gorm:"primaryKey;constraint:OnDelete:CASCADE"`
-	Username  string    `json:"username" gorm:"primaryKey"`
-	CreatedAt time.Time `json:"created_at"`
+func (b Board) StatusList() []string {
+	if b.Statuses == "" {
+		return DefaultStatuses
+	}
+	var result []string
+	for _, s := range splitStatuses(b.Statuses) {
+		if s != "" {
+			result = append(result, s)
+		}
+	}
+	if len(result) == 0 {
+		return DefaultStatuses
+	}
+	return result
+}
+
+func (b Board) ValidStatus(s string) bool {
+	for _, st := range b.StatusList() {
+		if st == s {
+			return true
+		}
+	}
+	return false
+}
+
+func splitStatuses(s string) []string {
+	var parts []string
+	start := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == ',' {
+			parts = append(parts, s[start:i])
+			start = i + 1
+		}
+	}
+	parts = append(parts, s[start:])
+	return parts
 }
 
 func ValidRole(role string) bool {
 	switch role {
-	case "owner", "admin", "member":
+	case "owner", "member":
 		return true
 	}
 	return false

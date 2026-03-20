@@ -73,14 +73,10 @@ func (c *Client) CreateTicket(title, content, assignee string) (model.Ticket, er
 type ListOptions struct {
 	Status string
 	Mine   bool
-	All    bool
 }
 
 func (c *Client) ListTickets(opts ListOptions) ([]model.Ticket, error) {
 	params := map[string]string{}
-	if opts.All {
-		params["all"] = "true"
-	}
 	if opts.Status != "" {
 		params["status"] = opts.Status
 	}
@@ -179,8 +175,8 @@ func (c *Client) ListWorkspaceMembers(wid string) ([]model.WorkspaceMember, erro
 	return members, decode(resp, http.StatusOK, &members)
 }
 
-func (c *Client) InviteWorkspaceMember(wid, username, role string) error {
-	resp, err := c.r.R().SetBody(map[string]string{"username": username, "role": role}).Post("/api/workspaces/" + wid + "/members")
+func (c *Client) InviteWorkspaceMember(wid, username string) error {
+	resp, err := c.r.R().SetBody(map[string]string{"username": username}).Post("/api/workspaces/" + wid + "/members")
 	if err != nil {
 		return err
 	}
@@ -198,18 +194,14 @@ func (c *Client) KickWorkspaceMember(wid, username string) error {
 	return check(resp, http.StatusNoContent)
 }
 
-func (c *Client) ChangeRole(wid, username, role string) error {
-	resp, err := c.r.R().SetBody(map[string]string{"role": role}).Patch("/api/workspaces/" + wid + "/members/" + username)
-	if err != nil {
-		return err
-	}
-	return check(resp, http.StatusOK)
-}
-
 // --- Board methods ---
 
-func (c *Client) CreateBoard(wid, name string) (model.Board, error) {
-	resp, err := c.r.R().SetBody(map[string]string{"name": name}).Post("/api/workspaces/" + wid + "/boards")
+func (c *Client) CreateBoard(wid, name string, statuses []string) (model.Board, error) {
+	body := map[string]any{"name": name}
+	if len(statuses) > 0 {
+		body["statuses"] = statuses
+	}
+	resp, err := c.r.R().SetBody(body).Post("/api/workspaces/" + wid + "/boards")
 	if err != nil {
 		return model.Board{}, err
 	}
@@ -226,33 +218,17 @@ func (c *Client) ListBoards(wid string) ([]model.Board, error) {
 	return boards, decode(resp, http.StatusOK, &boards)
 }
 
+func (c *Client) UpdateBoard(wid, bid string, fields map[string]any) (model.Board, error) {
+	resp, err := c.r.R().SetBody(fields).Patch("/api/workspaces/" + wid + "/boards/" + bid)
+	if err != nil {
+		return model.Board{}, err
+	}
+	var bd model.Board
+	return bd, decode(resp, http.StatusOK, &bd)
+}
+
 func (c *Client) DeleteBoard(wid, bid string) error {
 	resp, err := c.r.R().Delete("/api/workspaces/" + wid + "/boards/" + bid)
-	if err != nil {
-		return err
-	}
-	return check(resp, http.StatusNoContent)
-}
-
-func (c *Client) ListBoardMembers(wid, bid string) ([]model.BoardMember, error) {
-	resp, err := c.r.R().Get("/api/workspaces/" + wid + "/boards/" + bid + "/members")
-	if err != nil {
-		return nil, err
-	}
-	var members []model.BoardMember
-	return members, decode(resp, http.StatusOK, &members)
-}
-
-func (c *Client) GrantBoardAccess(wid, bid, username string) error {
-	resp, err := c.r.R().SetBody(map[string]string{"username": username}).Post("/api/workspaces/" + wid + "/boards/" + bid + "/members")
-	if err != nil {
-		return err
-	}
-	return check(resp, http.StatusCreated)
-}
-
-func (c *Client) RevokeBoardAccess(wid, bid, username string) error {
-	resp, err := c.r.R().Delete("/api/workspaces/" + wid + "/boards/" + bid + "/members/" + username)
 	if err != nil {
 		return err
 	}

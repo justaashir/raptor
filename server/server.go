@@ -7,7 +7,7 @@ import (
 	"log"
 	"net/http"
 	"raptor/model"
-	"time"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
@@ -17,7 +17,7 @@ import (
 
 var allowedPatchFields = map[string]bool{
 	"title": true, "content": true, "status": true,
-	"assignee": true, "close_reason": true,
+	"assignee": true,
 }
 
 type Server struct {
@@ -65,18 +65,13 @@ func NewServer(db *DB, hub *Hub, opts ...Option) *Server {
 	// Workspace members
 	ws.GET("/:wid/members", s.listWorkspaceMembers)
 	ws.POST("/:wid/members", s.addWorkspaceMember)
-	ws.PATCH("/:wid/members/:username", s.updateWorkspaceMember)
 	ws.DELETE("/:wid/members/:username", s.removeWorkspaceMember)
 
 	// Boards
 	ws.GET("/:wid/boards", s.listBoards)
 	ws.POST("/:wid/boards", s.createBoard)
+	ws.PATCH("/:wid/boards/:bid", s.updateBoard)
 	ws.DELETE("/:wid/boards/:bid", s.deleteBoard)
-
-	// Board members
-	ws.GET("/:wid/boards/:bid/members", s.listBoardMembers)
-	ws.POST("/:wid/boards/:bid/members", s.addBoardMember)
-	ws.DELETE("/:wid/boards/:bid/members/:username", s.removeBoardMember)
 
 	// Tickets
 	ws.GET("/:wid/boards/:bid/tickets", s.listTickets)
@@ -106,8 +101,8 @@ func username(c echo.Context) string {
 	return ""
 }
 
-// authorize checks if the user has at least minRole in the workspace.
-func (s *Server) authorize(c echo.Context, workspaceID, boardID, minRole string) error {
+// authorize checks if the user is a workspace member with at least minRole.
+func (s *Server) authorize(c echo.Context, workspaceID, minRole string) error {
 	u := username(c)
 	if u == "" {
 		return errors.New("unauthorized")
@@ -117,16 +112,9 @@ func (s *Server) authorize(c echo.Context, workspaceID, boardID, minRole string)
 		return errors.New("not a workspace member")
 	}
 
-	roleLevel := map[string]int{"owner": 3, "admin": 2, "member": 1}
+	roleLevel := map[string]int{"owner": 2, "member": 1}
 	if roleLevel[role] < roleLevel[minRole] {
 		return errors.New("insufficient permissions")
-	}
-
-	if boardID != "" && role == "member" {
-		isMember, _ := s.db.IsBoardMember(boardID, u)
-		if !isMember {
-			return errors.New("no access to this board")
-		}
 	}
 	return nil
 }
@@ -200,7 +188,7 @@ func (s *Server) createWorkspace(c echo.Context) error {
 
 func (s *Server) deleteWorkspace(c echo.Context) error {
 	wid := c.Param("wid")
-	if err := s.authorize(c, wid, "", "owner"); err != nil {
+	if err := s.authorize(c, wid, "owner"); err != nil {
 		return jsonErr(c, http.StatusForbidden, err.Error())
 	}
 	if err := s.db.DeleteWorkspace(wid); err != nil {
@@ -213,7 +201,7 @@ func (s *Server) deleteWorkspace(c echo.Context) error {
 
 func (s *Server) listWorkspaceMembers(c echo.Context) error {
 	wid := c.Param("wid")
-	if err := s.authorize(c, wid, "", "member"); err != nil {
+	if err := s.authorize(c, wid, "member"); err != nil {
 		return jsonErr(c, http.StatusForbidden, err.Error())
 	}
 	members, err := s.db.ListWorkspaceMembers(wid)
@@ -228,56 +216,28 @@ func (s *Server) listWorkspaceMembers(c echo.Context) error {
 
 func (s *Server) addWorkspaceMember(c echo.Context) error {
 	wid := c.Param("wid")
-	if err := s.authorize(c, wid, "", "admin"); err != nil {
+	if err := s.authorize(c, wid, "owner"); err != nil {
 		return jsonErr(c, http.StatusForbidden, err.Error())
 	}
 	var input struct {
 		Username string `json:"username"`
-		Role     string `json:"role"`
 	}
 	if err := c.Bind(&input); err != nil {
 		return jsonErr(c, http.StatusBadRequest, "bad request")
 	}
-	if input.Role == "" {
-		input.Role = "member"
-	}
-	if !model.ValidRole(input.Role) {
-		return jsonErr(c, http.StatusBadRequest, "invalid role")
-	}
-	if err := s.db.AddWorkspaceMember(wid, input.Username, input.Role); err != nil {
+	if err := s.db.AddWorkspaceMember(wid, input.Username, "member"); err != nil {
 		if errors.Is(err, ErrAlreadyMember) {
 			return jsonErr(c, http.StatusConflict, "user is already a member of this workspace")
 		}
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
-	return c.JSON(http.StatusCreated, map[string]string{"username": input.Username, "role": input.Role})
-}
-
-func (s *Server) updateWorkspaceMember(c echo.Context) error {
-	wid := c.Param("wid")
-	user := c.Param("username")
-	if err := s.authorize(c, wid, "", "owner"); err != nil {
-		return jsonErr(c, http.StatusForbidden, err.Error())
-	}
-	var input struct {
-		Role string `json:"role"`
-	}
-	if err := c.Bind(&input); err != nil {
-		return jsonErr(c, http.StatusBadRequest, "bad request")
-	}
-	if !model.ValidRole(input.Role) {
-		return jsonErr(c, http.StatusBadRequest, "invalid role")
-	}
-	if err := s.db.UpdateMemberRole(wid, user, input.Role); err != nil {
-		return jsonErr(c, http.StatusInternalServerError, "internal server error")
-	}
-	return c.JSON(http.StatusOK, map[string]string{"username": user, "role": input.Role})
+	return c.JSON(http.StatusCreated, map[string]string{"username": input.Username, "role": "member"})
 }
 
 func (s *Server) removeWorkspaceMember(c echo.Context) error {
 	wid := c.Param("wid")
 	user := c.Param("username")
-	if err := s.authorize(c, wid, "", "admin"); err != nil {
+	if err := s.authorize(c, wid, "owner"); err != nil {
 		return jsonErr(c, http.StatusForbidden, err.Error())
 	}
 	if err := s.db.RemoveWorkspaceMember(wid, user); err != nil {
@@ -290,7 +250,7 @@ func (s *Server) removeWorkspaceMember(c echo.Context) error {
 
 func (s *Server) listBoards(c echo.Context) error {
 	wid := c.Param("wid")
-	if err := s.authorize(c, wid, "", "member"); err != nil {
+	if err := s.authorize(c, wid, "member"); err != nil {
 		return jsonErr(c, http.StatusForbidden, err.Error())
 	}
 	boards, err := s.db.ListBoardsForUser(wid, username(c))
@@ -305,11 +265,12 @@ func (s *Server) listBoards(c echo.Context) error {
 
 func (s *Server) createBoard(c echo.Context) error {
 	wid := c.Param("wid")
-	if err := s.authorize(c, wid, "", "admin"); err != nil {
+	if err := s.authorize(c, wid, "owner"); err != nil {
 		return jsonErr(c, http.StatusForbidden, err.Error())
 	}
 	var input struct {
-		Name string `json:"name"`
+		Name     string   `json:"name"`
+		Statuses []string `json:"statuses"`
 	}
 	if err := c.Bind(&input); err != nil {
 		return jsonErr(c, http.StatusBadRequest, "bad request")
@@ -317,70 +278,57 @@ func (s *Server) createBoard(c echo.Context) error {
 	if input.Name == "" {
 		return jsonErr(c, http.StatusBadRequest, "name required")
 	}
+	if len(input.Statuses) == 0 {
+		input.Statuses = model.DefaultStatuses
+	}
 	id := genID()
 	u := username(c)
-	if err := s.db.CreateBoard(id, wid, input.Name, u); err != nil {
+	if err := s.db.CreateBoard(id, wid, input.Name, u, input.Statuses); err != nil {
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
-	return c.JSON(http.StatusCreated, model.Board{ID: id, WorkspaceID: wid, Name: input.Name, CreatedBy: u})
+	return c.JSON(http.StatusCreated, model.Board{
+		ID: id, WorkspaceID: wid, Name: input.Name,
+		Statuses: strings.Join(input.Statuses, ","), CreatedBy: u,
+	})
+}
+
+func (s *Server) updateBoard(c echo.Context) error {
+	wid := c.Param("wid")
+	bid := c.Param("bid")
+	if err := s.authorize(c, wid, "owner"); err != nil {
+		return jsonErr(c, http.StatusForbidden, err.Error())
+	}
+	var input struct {
+		Name     *string  `json:"name"`
+		Statuses []string `json:"statuses"`
+	}
+	if err := c.Bind(&input); err != nil {
+		return jsonErr(c, http.StatusBadRequest, "bad request")
+	}
+	fields := map[string]any{}
+	if input.Name != nil && *input.Name != "" {
+		fields["name"] = *input.Name
+	}
+	if len(input.Statuses) > 0 {
+		fields["statuses"] = strings.Join(input.Statuses, ",")
+	}
+	if len(fields) == 0 {
+		return jsonErr(c, http.StatusBadRequest, "no valid fields")
+	}
+	if err := s.db.UpdateBoard(bid, fields); err != nil {
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
+	}
+	board, _ := s.db.GetBoard(bid)
+	return c.JSON(http.StatusOK, board)
 }
 
 func (s *Server) deleteBoard(c echo.Context) error {
 	wid := c.Param("wid")
 	bid := c.Param("bid")
-	if err := s.authorize(c, wid, "", "admin"); err != nil {
+	if err := s.authorize(c, wid, "owner"); err != nil {
 		return jsonErr(c, http.StatusForbidden, err.Error())
 	}
 	if err := s.db.DeleteBoard(bid); err != nil {
-		return jsonErr(c, http.StatusInternalServerError, "internal server error")
-	}
-	return c.NoContent(http.StatusNoContent)
-}
-
-// --- Board member handlers ---
-
-func (s *Server) listBoardMembers(c echo.Context) error {
-	wid := c.Param("wid")
-	bid := c.Param("bid")
-	if err := s.authorize(c, wid, bid, "member"); err != nil {
-		return jsonErr(c, http.StatusForbidden, err.Error())
-	}
-	members, err := s.db.ListBoardMembers(bid)
-	if err != nil {
-		return jsonErr(c, http.StatusInternalServerError, "internal server error")
-	}
-	if members == nil {
-		members = []model.BoardMember{}
-	}
-	return c.JSON(http.StatusOK, members)
-}
-
-func (s *Server) addBoardMember(c echo.Context) error {
-	wid := c.Param("wid")
-	bid := c.Param("bid")
-	if err := s.authorize(c, wid, "", "admin"); err != nil {
-		return jsonErr(c, http.StatusForbidden, err.Error())
-	}
-	var input struct {
-		Username string `json:"username"`
-	}
-	if err := c.Bind(&input); err != nil {
-		return jsonErr(c, http.StatusBadRequest, "bad request")
-	}
-	if err := s.db.AddBoardMember(bid, input.Username); err != nil {
-		return jsonErr(c, http.StatusInternalServerError, "internal server error")
-	}
-	return c.JSON(http.StatusCreated, map[string]string{"username": input.Username, "board_id": bid})
-}
-
-func (s *Server) removeBoardMember(c echo.Context) error {
-	wid := c.Param("wid")
-	bid := c.Param("bid")
-	user := c.Param("username")
-	if err := s.authorize(c, wid, "", "admin"); err != nil {
-		return jsonErr(c, http.StatusForbidden, err.Error())
-	}
-	if err := s.db.RemoveBoardMember(bid, user); err != nil {
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
 	return c.NoContent(http.StatusNoContent)
@@ -391,7 +339,7 @@ func (s *Server) removeBoardMember(c echo.Context) error {
 func (s *Server) listTickets(c echo.Context) error {
 	wid := c.Param("wid")
 	bid := c.Param("bid")
-	if err := s.authorize(c, wid, bid, "member"); err != nil {
+	if err := s.authorize(c, wid, "member"); err != nil {
 		return jsonErr(c, http.StatusForbidden, err.Error())
 	}
 	u := username(c)
@@ -410,7 +358,6 @@ func (s *Server) listTickets(c echo.Context) error {
 	}
 
 	query := c.QueryParam("q")
-	all := c.QueryParam("all")
 	status := c.QueryParam("status")
 	mine := c.QueryParam("mine")
 
@@ -418,8 +365,6 @@ func (s *Server) listTickets(c echo.Context) error {
 	var err error
 	if query != "" {
 		tickets, err = s.db.SearchTickets(bid, query)
-	} else if all == "true" {
-		tickets, err = s.db.ListAllTickets(bid)
 	} else {
 		tickets, err = s.db.ListTickets(bid, status)
 	}
@@ -445,7 +390,7 @@ func (s *Server) listTickets(c echo.Context) error {
 func (s *Server) createTicket(c echo.Context) error {
 	wid := c.Param("wid")
 	bid := c.Param("bid")
-	if err := s.authorize(c, wid, bid, "member"); err != nil {
+	if err := s.authorize(c, wid, "member"); err != nil {
 		return jsonErr(c, http.StatusForbidden, err.Error())
 	}
 	u := username(c)
@@ -457,12 +402,6 @@ func (s *Server) createTicket(c echo.Context) error {
 	}
 	if err := c.Bind(&input); err != nil {
 		return jsonErr(c, http.StatusBadRequest, "bad request")
-	}
-	if input.Assign != "" {
-		isMember, _ := s.db.IsBoardMember(bid, input.Assign)
-		if !isMember {
-			return jsonErr(c, http.StatusBadRequest, "assignee is not a board member")
-		}
 	}
 	ticket := model.NewTicket(input.Title, input.Content, u)
 	ticket.BoardID = bid
@@ -479,9 +418,8 @@ func (s *Server) createTicket(c echo.Context) error {
 
 func (s *Server) getTicket(c echo.Context) error {
 	wid := c.Param("wid")
-	bid := c.Param("bid")
 	tid := c.Param("tid")
-	if err := s.authorize(c, wid, bid, "member"); err != nil {
+	if err := s.authorize(c, wid, "member"); err != nil {
 		return jsonErr(c, http.StatusForbidden, err.Error())
 	}
 	ticket, err := s.db.GetTicket(tid)
@@ -498,7 +436,7 @@ func (s *Server) updateTicket(c echo.Context) error {
 	wid := c.Param("wid")
 	bid := c.Param("bid")
 	tid := c.Param("tid")
-	if err := s.authorize(c, wid, bid, "member"); err != nil {
+	if err := s.authorize(c, wid, "member"); err != nil {
 		return jsonErr(c, http.StatusForbidden, err.Error())
 	}
 
@@ -515,25 +453,17 @@ func (s *Server) updateTicket(c echo.Context) error {
 	if len(fields) == 0 {
 		return jsonErr(c, http.StatusBadRequest, "no valid fields")
 	}
-	// Validate status
+	// Validate status against board's allowed statuses
 	if st, ok := fields["status"].(string); ok {
-		if !model.ValidStatus(model.Status(st)) {
-			return jsonErr(c, http.StatusBadRequest, "invalid status")
+		board, err := s.db.GetBoard(bid)
+		if err != nil {
+			return jsonErr(c, http.StatusInternalServerError, "internal server error")
 		}
-		if model.Status(st) == model.Closed {
-			fields["closed_at"] = time.Now()
-		} else {
-			fields["closed_at"] = gorm.Expr("NULL")
-			if _, hasReason := fields["close_reason"]; !hasReason {
-				fields["close_reason"] = ""
-			}
+		if !board.ValidStatus(st) {
+			return jsonErr(c, http.StatusBadRequest, "invalid status")
 		}
 	}
 	if assignee, ok := fields["assignee"].(string); ok && assignee != "" {
-		isMember, _ := s.db.IsBoardMember(bid, assignee)
-		if !isMember {
-			return jsonErr(c, http.StatusBadRequest, "assignee is not a board member")
-		}
 		fields["assigned_by"] = username(c)
 	}
 	if err := s.db.UpdateTicket(tid, fields); err != nil {
@@ -547,9 +477,8 @@ func (s *Server) updateTicket(c echo.Context) error {
 
 func (s *Server) deleteTicket(c echo.Context) error {
 	wid := c.Param("wid")
-	bid := c.Param("bid")
 	tid := c.Param("tid")
-	if err := s.authorize(c, wid, bid, "member"); err != nil {
+	if err := s.authorize(c, wid, "member"); err != nil {
 		return jsonErr(c, http.StatusForbidden, err.Error())
 	}
 	if err := s.db.DeleteTicket(tid); err != nil {
