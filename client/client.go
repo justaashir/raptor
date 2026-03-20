@@ -127,6 +127,10 @@ func (c *Client) UpdateTicket(id string, fields map[string]any) (model.Ticket, e
 		return model.Ticket{}, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		msg, _ := io.ReadAll(resp.Body)
+		return model.Ticket{}, fmt.Errorf("unexpected status: %d: %s", resp.StatusCode, msg)
+	}
 	var ticket model.Ticket
 	json.NewDecoder(resp.Body).Decode(&ticket)
 	return ticket, nil
