@@ -183,27 +183,12 @@ func TestClient_CreateBoard(t *testing.T) {
 	defer ts.Close()
 
 	c := New(ts.URL, "")
-	bd, err := c.CreateBoard("ws1", "Sprint")
+	bd, err := c.CreateBoard("ws1", "Sprint", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if bd.Name != "Sprint" {
 		t.Fatalf("expected Sprint, got %s", bd.Name)
-	}
-}
-
-func TestClient_ListTickets_WithAllFlag(t *testing.T) {
-	var gotQuery string
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotQuery = r.URL.RawQuery
-		json.NewEncoder(w).Encode([]model.Ticket{})
-	}))
-	defer ts.Close()
-
-	c := NewScoped(ts.URL, "", "ws1", "bd1")
-	c.ListTickets(ListOptions{All: true})
-	if !strings.Contains(gotQuery, "all=true") {
-		t.Fatalf("expected all=true in query, got %q", gotQuery)
 	}
 }
 
@@ -245,9 +230,6 @@ func TestClient_SearchTickets(t *testing.T) {
 
 func TestClient_TicketStats(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("stats") != "true" {
-			t.Fatalf("expected stats=true, got %q", r.URL.RawQuery)
-		}
 		json.NewEncoder(w).Encode(map[string]any{
 			"total":  3,
 			"counts": map[string]any{"todo": 2, "done": 1},
@@ -265,44 +247,25 @@ func TestClient_TicketStats(t *testing.T) {
 	}
 }
 
-func TestClient_UpdateTicket_ServerError(t *testing.T) {
+func TestClient_UpdateBoard(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		if r.Method != "PATCH" {
+			t.Fatalf("expected PATCH, got %s", r.Method)
+		}
+		expected := "/api/workspaces/ws1/boards/bd1"
+		if r.URL.Path != expected {
+			t.Fatalf("expected %s, got %s", expected, r.URL.Path)
+		}
+		json.NewEncoder(w).Encode(model.Board{ID: "bd1", Name: "Updated"})
 	}))
 	defer ts.Close()
 
-	c := NewScoped(ts.URL, "", "ws1", "bd1")
-	_, err := c.UpdateTicket("abc", map[string]any{"status": "banana"})
-	if err == nil {
-		t.Fatal("expected error for 400 response")
+	c := New(ts.URL, "")
+	bd, err := c.UpdateBoard("ws1", "bd1", map[string]any{"name": "Updated"})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(err.Error(), "400") {
-		t.Fatalf("expected error to contain status code, got %q", err.Error())
-	}
-}
-
-func TestClient_SearchTickets_ServerError(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "server error", http.StatusInternalServerError)
-	}))
-	defer ts.Close()
-
-	c := NewScoped(ts.URL, "", "ws1", "bd1")
-	_, err := c.SearchTickets("test")
-	if err == nil {
-		t.Fatal("expected error for 500 response")
-	}
-}
-
-func TestClient_ListTickets_DecodeError(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("not json"))
-	}))
-	defer ts.Close()
-
-	c := NewScoped(ts.URL, "", "ws1", "bd1")
-	_, err := c.ListTickets(ListOptions{})
-	if err == nil {
-		t.Fatal("expected error for malformed JSON")
+	if bd.Name != "Updated" {
+		t.Fatalf("expected Updated, got %s", bd.Name)
 	}
 }

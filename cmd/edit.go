@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"raptor/client"
 
 	"github.com/spf13/cobra"
 )
@@ -34,7 +33,7 @@ var editCmd = &cobra.Command{
 		if len(fields) == 0 {
 			return fmt.Errorf("specify --title, --content, or --assign to edit")
 		}
-		c := client.NewScoped(serverURL, authToken, activeWS, activeBoard)
+		c := newClient()
 		ticket, err := c.UpdateTicket(args[0], fields)
 		if err != nil {
 			return err

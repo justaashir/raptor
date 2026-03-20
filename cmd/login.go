@@ -47,7 +47,6 @@ var loginCmd = &cobra.Command{
 			return fmt.Errorf("failed to parse auth response: %w", err)
 		}
 
-		// Save config
 		cfg := Config{
 			Server:   serverURL,
 			Token:    result.Token,
@@ -73,6 +72,13 @@ var loginCmd = &cobra.Command{
 		}
 
 		fmt.Printf("Logged in as %s. Token saved to ~/.raptor.json\n", result.Username)
+
+		if cfg.Workspace == "" {
+			fmt.Println("\nNext steps:")
+			fmt.Println("  raptor workspace create <name>   — create your first workspace")
+			fmt.Println("  raptor board create <name>       — create your first board")
+		}
+
 		return nil
 	},
 }

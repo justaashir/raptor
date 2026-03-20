@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"raptor/client"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -56,7 +55,7 @@ var addCmd = &cobra.Command{
 		if err := requireBoard(); err != nil {
 			return err
 		}
-		c := client.NewScoped(serverURL, authToken, activeWS, activeBoard)
+		c := newClient()
 		ticket, err := c.CreateTicket(args[0], addContent, addAssign)
 		if err != nil {
 			return err

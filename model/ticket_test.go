@@ -31,26 +31,22 @@ func TestNewTicket_HasIDTitleAndStatus(t *testing.T) {
 	}
 }
 
-func TestValidStatus_AcceptsTodoInProgressDoneClosed(t *testing.T) {
-	for _, s := range []Status{Todo, InProgress, Done, Closed} {
+func TestValidStatus_AcceptsTodoInProgressDone(t *testing.T) {
+	for _, s := range []Status{Todo, InProgress, Done} {
 		if !ValidStatus(s) {
 			t.Fatalf("expected %q to be valid", s)
 		}
 	}
 }
 
-func TestTicket_HasCloseFields(t *testing.T) {
-	ticket := NewTicket("task", "", "alice")
-	if ticket.CloseReason != "" {
-		t.Fatalf("expected empty close reason, got %q", ticket.CloseReason)
-	}
-	if ticket.ClosedAt != nil {
-		t.Fatal("expected nil ClosedAt")
-	}
-}
-
 func TestValidStatus_RejectsGarbage(t *testing.T) {
 	if ValidStatus("banana") {
 		t.Fatal("expected 'banana' to be invalid")
+	}
+}
+
+func TestValidStatus_RejectsClosed(t *testing.T) {
+	if ValidStatus("closed") {
+		t.Fatal("expected 'closed' to be invalid — closed status removed")
 	}
 }

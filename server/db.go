@@ -18,7 +18,7 @@ type DB struct {
 	conn *gorm.DB
 }
 
-func NewDB(dsn string, seedUsers ...string) (*DB, error) {
+func NewDB(dsn string) (*DB, error) {
 	conn, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Warn),
 	})
@@ -37,13 +37,12 @@ func NewDB(dsn string, seedUsers ...string) (*DB, error) {
 		&model.Workspace{},
 		&model.WorkspaceMember{},
 		&model.Board{},
-		&model.BoardMember{},
 		&schemaVersion{},
 	); err != nil {
 		return nil, err
 	}
 
-	if err := seed(conn, seedUsers); err != nil {
+	if err := seed(conn); err != nil {
 		return nil, err
 	}
 
@@ -100,12 +99,6 @@ func (db *DB) GetMemberRole(workspaceID, username string) (string, error) {
 	return member.Role, err
 }
 
-func (db *DB) UpdateMemberRole(workspaceID, username, role string) error {
-	return db.conn.Model(&model.WorkspaceMember{}).
-		Where("workspace_id = ? AND username = ?", workspaceID, username).
-		Update("role", role).Error
-}
-
 func (db *DB) RemoveWorkspaceMember(workspaceID, username string) error {
 	return db.conn.Where("workspace_id = ? AND username = ?", workspaceID, username).
 		Delete(&model.WorkspaceMember{}).Error
@@ -121,9 +114,6 @@ func (db *DB) DeleteWorkspace(id string) error {
 			return err
 		}
 		for _, b := range boards {
-			if err := tx.Where("board_id = ?", b.ID).Delete(&model.BoardMember{}).Error; err != nil {
-				return err
-			}
 			if err := tx.Where("board_id = ?", b.ID).Delete(&model.Ticket{}).Error; err != nil {
 				return err
 			}
@@ -152,35 +142,28 @@ func (db *DB) ListWorkspacesForUser(username string) ([]model.Workspace, error) 
 
 // Board methods
 
-func (db *DB) CreateBoard(id, workspaceID, name, createdBy string) error {
+func (db *DB) CreateBoard(id, workspaceID, name, createdBy string, statuses []string) error {
+	statusStr := strings.Join(statuses, ",")
 	return db.conn.Create(&model.Board{
-		ID: id, WorkspaceID: workspaceID, Name: name, CreatedBy: createdBy,
+		ID: id, WorkspaceID: workspaceID, Name: name, Statuses: statusStr, CreatedBy: createdBy,
 	}).Error
 }
 
 func (db *DB) ListBoardsForUser(workspaceID, username string) ([]model.Board, error) {
-	role, err := db.GetMemberRole(workspaceID, username)
+	// All workspace members see all boards — no board-level ACL
+	_, err := db.GetMemberRole(workspaceID, username)
 	if err != nil {
 		return nil, nil
 	}
 
 	var boards []model.Board
-	if role == "owner" || role == "admin" {
-		err = db.conn.Where("workspace_id = ?", workspaceID).
-			Order("created_at").Find(&boards).Error
-	} else {
-		err = db.conn.Joins("JOIN board_members ON boards.id = board_members.board_id").
-			Where("boards.workspace_id = ? AND board_members.username = ?", workspaceID, username).
-			Order("boards.created_at").Find(&boards).Error
-	}
+	err = db.conn.Where("workspace_id = ?", workspaceID).
+		Order("created_at").Find(&boards).Error
 	return boards, err
 }
 
 func (db *DB) DeleteBoard(id string) error {
 	return db.conn.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("board_id = ?", id).Delete(&model.BoardMember{}).Error; err != nil {
-			return err
-		}
 		if err := tx.Where("board_id = ?", id).Delete(&model.Ticket{}).Error; err != nil {
 			return err
 		}
@@ -194,46 +177,8 @@ func (db *DB) GetBoard(id string) (model.Board, error) {
 	return b, err
 }
 
-// Board member methods
-
-func (db *DB) AddBoardMember(boardID, username string) error {
-	return db.conn.Create(&model.BoardMember{
-		BoardID: boardID, Username: username,
-	}).Error
-}
-
-func (db *DB) ListBoardMembers(boardID string) ([]model.BoardMember, error) {
-	var members []model.BoardMember
-	err := db.conn.Where("board_id = ?", boardID).
-		Order("created_at").Find(&members).Error
-	return members, err
-}
-
-func (db *DB) IsBoardMember(boardID, username string) (bool, error) {
-	var count int64
-	err := db.conn.Model(&model.BoardMember{}).
-		Where("board_id = ? AND username = ?", boardID, username).
-		Count(&count).Error
-	if err != nil {
-		return false, err
-	}
-	if count > 0 {
-		return true, nil
-	}
-	// Owners/admins have implicit access
-	var member model.WorkspaceMember
-	err = db.conn.Joins("JOIN boards ON boards.workspace_id = workspace_members.workspace_id").
-		Where("boards.id = ? AND workspace_members.username = ?", boardID, username).
-		First(&member).Error
-	if err != nil {
-		return false, nil
-	}
-	return member.Role == "owner" || member.Role == "admin", nil
-}
-
-func (db *DB) RemoveBoardMember(boardID, username string) error {
-	return db.conn.Where("board_id = ? AND username = ?", boardID, username).
-		Delete(&model.BoardMember{}).Error
+func (db *DB) UpdateBoard(id string, fields map[string]any) error {
+	return db.conn.Model(&model.Board{}).Where("id = ?", id).Updates(fields).Error
 }
 
 // Ticket methods
@@ -260,8 +205,6 @@ func (db *DB) ListTickets(boardID, status string) ([]model.Ticket, error) {
 	}
 	if status != "" {
 		q = q.Where("status = ?", status)
-	} else {
-		q = q.Where("status != ?", model.Closed)
 	}
 	err := q.Order("created_at DESC").Find(&tickets).Error
 	return tickets, err
@@ -275,7 +218,6 @@ func (db *DB) SearchTickets(boardID, query string) ([]model.Ticket, error) {
 	// Escape LIKE wildcards in user input
 	escaped := likeEscaper.Replace(query)
 	q := db.conn.Model(&model.Ticket{}).
-		Where("status != ?", model.Closed).
 		Where("(title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\')", "%"+escaped+"%", "%"+escaped+"%")
 	if boardID != "" {
 		q = q.Where("board_id = ?", boardID)
@@ -297,9 +239,7 @@ func (db *DB) TicketStats(boardID string) (map[string]int, error) {
 	if err := q.Find(&results).Error; err != nil {
 		return nil, err
 	}
-	counts := map[string]int{
-		"todo": 0, "in_progress": 0, "done": 0, "closed": 0,
-	}
+	counts := map[string]int{}
 	for _, r := range results {
 		counts[r.Status] = r.Count
 	}

@@ -15,7 +15,6 @@ func TestStatusColor_ReturnsCorrectColors(t *testing.T) {
 		{model.Todo, colorOrange},
 		{model.InProgress, colorCyan},
 		{model.Done, colorGreen},
-		{model.Closed, colorRed},
 		{model.Status("unknown"), colorComment},
 	}
 	for _, tt := range tests {
@@ -34,7 +33,6 @@ func TestStatusIcon_ReturnsCorrectIcons(t *testing.T) {
 		{model.Todo, "📋"},
 		{model.InProgress, "⚡"},
 		{model.Done, "✅"},
-		{model.Closed, "🔒"},
 	}
 	for _, tt := range tests {
 		got := StatusIcon(tt.status)

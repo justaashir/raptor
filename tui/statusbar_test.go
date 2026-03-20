@@ -57,7 +57,6 @@ func TestCountByStatus(t *testing.T) {
 		{ID: "2", Status: model.Todo, CreatedAt: now},
 		{ID: "3", Status: model.InProgress, CreatedAt: now},
 		{ID: "4", Status: model.Done, CreatedAt: now},
-		{ID: "5", Status: model.Closed, CreatedAt: now},
 	}
 
 	counts := CountByStatus(tickets)
@@ -70,8 +69,5 @@ func TestCountByStatus(t *testing.T) {
 	}
 	if counts[model.Done] != 1 {
 		t.Fatalf("Done count = %d, want 1", counts[model.Done])
-	}
-	if counts[model.Closed] != 1 {
-		t.Fatalf("Closed count = %d, want 1", counts[model.Closed])
 	}
 }

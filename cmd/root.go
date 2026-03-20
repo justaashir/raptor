@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"raptor/client"
 	"raptor/tui"
 	"time"
 
@@ -96,24 +97,38 @@ func requireBoard() error {
 	return nil
 }
 
-func checkForUpdate() {
-	if Version == "dev" {
-		return
-	}
-	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(serverURL + "/api/version")
+// newClient returns a scoped API client using the current config.
+func newClient() *client.Client {
+	return client.NewScoped(serverURL, authToken, activeWS, activeBoard)
+}
+
+// newUnscopedClient returns an API client without workspace/board scope.
+func newUnscopedClient() *client.Client {
+	return client.New(serverURL, authToken)
+}
+
+// fetchServerVersion returns the server's version string, or "" on error.
+func fetchServerVersion() string {
+	c := &http.Client{Timeout: 5 * time.Second}
+	resp, err := c.Get(serverURL + "/api/version")
 	if err != nil {
-		return
+		return ""
 	}
 	defer resp.Body.Close()
-
 	var info struct {
 		Version string `json:"version"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return ""
+	}
+	return info.Version
+}
+
+func checkForUpdate() {
+	if Version == "dev" {
 		return
 	}
-	if info.Version != "" && info.Version != Version {
-		fmt.Fprintf(os.Stderr, "\nUpdate available: %s → %s (run `raptor update`)\n", Version, info.Version)
+	if v := fetchServerVersion(); v != "" && v != Version {
+		fmt.Fprintf(os.Stderr, "\nUpdate available: %s → %s (run `raptor update`)\n", Version, v)
 	}
 }

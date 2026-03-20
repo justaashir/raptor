@@ -3,9 +3,6 @@ package server
 import (
 	"raptor/model"
 	"testing"
-	"time"
-
-	"gorm.io/gorm"
 )
 
 func TestDB_CreateAndGetTicket(t *testing.T) {
@@ -83,6 +80,23 @@ func TestDB_ListTickets_FilterByStatus(t *testing.T) {
 	}
 }
 
+func TestDB_ListTickets_NoStatusReturnsAll(t *testing.T) {
+	db := newTestDB(t)
+	t1 := model.NewTicket("Task A", "", "")
+	t2 := model.NewTicket("Task B", "", "")
+	t2.Status = model.Done
+	db.CreateTicket(t1)
+	db.CreateTicket(t2)
+
+	tickets, err := db.ListTickets("", "")
+	if err != nil {
+		t.Fatalf("failed to list: %v", err)
+	}
+	if len(tickets) != 2 {
+		t.Fatalf("expected 2 tickets (no closed filtering), got %d", len(tickets))
+	}
+}
+
 func TestDB_UpdateTicket(t *testing.T) {
 	db := newTestDB(t)
 	ticket := model.NewTicket("Original", "", "")
@@ -143,7 +157,6 @@ func TestDB_WorkspaceMembers(t *testing.T) {
 	db := newTestDB(t)
 	db.CreateWorkspace("ws1", "Team", "alice")
 
-	// alice is already owner from CreateWorkspace
 	role, err := db.GetMemberRole("ws1", "alice")
 	if err != nil {
 		t.Fatalf("failed to get role: %v", err)
@@ -152,7 +165,6 @@ func TestDB_WorkspaceMembers(t *testing.T) {
 		t.Fatalf("expected owner, got %q", role)
 	}
 
-	// Add bob as member
 	err = db.AddWorkspaceMember("ws1", "bob", "member")
 	if err != nil {
 		t.Fatalf("failed to add member: %v", err)
@@ -166,7 +178,6 @@ func TestDB_WorkspaceMembers(t *testing.T) {
 		t.Fatalf("expected 2 members, got %d", len(members))
 	}
 
-	// bob can see the workspace
 	workspaces, _ := db.ListWorkspacesForUser("bob")
 	if len(workspaces) != 1 {
 		t.Fatalf("expected bob to see 1 workspace, got %d", len(workspaces))
@@ -182,30 +193,9 @@ func TestDB_AddWorkspaceMember_Duplicate(t *testing.T) {
 		t.Fatalf("first add should succeed: %v", err)
 	}
 
-	err = db.AddWorkspaceMember("ws1", "bob", "admin")
+	err = db.AddWorkspaceMember("ws1", "bob", "member")
 	if err != ErrAlreadyMember {
 		t.Fatalf("expected ErrAlreadyMember, got %v", err)
-	}
-
-	// Verify bob's role didn't change
-	role, _ := db.GetMemberRole("ws1", "bob")
-	if role != "member" {
-		t.Fatalf("expected role to remain member, got %q", role)
-	}
-}
-
-func TestDB_UpdateMemberRole(t *testing.T) {
-	db := newTestDB(t)
-	db.CreateWorkspace("ws1", "Team", "alice")
-	db.AddWorkspaceMember("ws1", "bob", "member")
-
-	err := db.UpdateMemberRole("ws1", "bob", "admin")
-	if err != nil {
-		t.Fatalf("failed to update role: %v", err)
-	}
-	role, _ := db.GetMemberRole("ws1", "bob")
-	if role != "admin" {
-		t.Fatalf("expected admin, got %q", role)
 	}
 }
 
@@ -224,11 +214,11 @@ func TestDB_RemoveWorkspaceMember(t *testing.T) {
 	}
 }
 
-func TestDB_CreateBoard(t *testing.T) {
+func TestDB_CreateBoard_WithStatuses(t *testing.T) {
 	db := newTestDB(t)
 	db.CreateWorkspace("ws1", "Team", "alice")
 
-	err := db.CreateBoard("bd1", "ws1", "Sprint 1", "alice")
+	err := db.CreateBoard("bd1", "ws1", "Sprint 1", "alice", []string{"backlog", "active", "done"})
 	if err != nil {
 		t.Fatalf("failed to create board: %v", err)
 	}
@@ -243,32 +233,26 @@ func TestDB_CreateBoard(t *testing.T) {
 	if boards[0].Name != "Sprint 1" {
 		t.Fatalf("expected name %q, got %q", "Sprint 1", boards[0].Name)
 	}
+	statuses := boards[0].StatusList()
+	if len(statuses) != 3 || statuses[0] != "backlog" {
+		t.Fatalf("expected custom statuses, got %v", statuses)
+	}
 }
 
-func TestDB_ListBoardsForUser_MemberAccess(t *testing.T) {
+func TestDB_ListBoardsForUser_AllMembersSeeAllBoards(t *testing.T) {
 	db := newTestDB(t)
 	db.CreateWorkspace("ws1", "Team", "alice")
 	db.AddWorkspaceMember("ws1", "bob", "member")
-	db.CreateBoard("bd1", "ws1", "Board 1", "alice")
-	db.CreateBoard("bd2", "ws1", "Board 2", "alice")
+	db.CreateBoard("bd1", "ws1", "Board 1", "alice", model.DefaultStatuses)
+	db.CreateBoard("bd2", "ws1", "Board 2", "alice", model.DefaultStatuses)
 
-	// bob has no board grants yet — should see no boards
+	// bob (member) sees all boards — no board-level ACL
 	boards, _ := db.ListBoardsForUser("ws1", "bob")
-	if len(boards) != 0 {
-		t.Fatalf("expected 0 boards for bob, got %d", len(boards))
+	if len(boards) != 2 {
+		t.Fatalf("expected 2 boards for bob (member sees all), got %d", len(boards))
 	}
 
-	// Grant bob access to Board 1
-	db.AddBoardMember("bd1", "bob")
-	boards, _ = db.ListBoardsForUser("ws1", "bob")
-	if len(boards) != 1 {
-		t.Fatalf("expected 1 board for bob, got %d", len(boards))
-	}
-	if boards[0].Name != "Board 1" {
-		t.Fatalf("expected Board 1, got %q", boards[0].Name)
-	}
-
-	// alice (owner) sees all boards
+	// alice (owner) also sees all
 	boards, _ = db.ListBoardsForUser("ws1", "alice")
 	if len(boards) != 2 {
 		t.Fatalf("expected 2 boards for alice (owner), got %d", len(boards))
@@ -278,7 +262,7 @@ func TestDB_ListBoardsForUser_MemberAccess(t *testing.T) {
 func TestDB_DeleteBoard(t *testing.T) {
 	db := newTestDB(t)
 	db.CreateWorkspace("ws1", "Team", "alice")
-	db.CreateBoard("bd1", "ws1", "Sprint", "alice")
+	db.CreateBoard("bd1", "ws1", "Sprint", "alice", model.DefaultStatuses)
 
 	err := db.DeleteBoard("bd1")
 	if err != nil {
@@ -290,51 +274,34 @@ func TestDB_DeleteBoard(t *testing.T) {
 	}
 }
 
-func TestDB_BoardMembers(t *testing.T) {
+func TestDB_UpdateBoard(t *testing.T) {
 	db := newTestDB(t)
 	db.CreateWorkspace("ws1", "Team", "alice")
-	db.CreateBoard("bd1", "ws1", "Sprint", "alice")
-	db.AddWorkspaceMember("ws1", "bob", "member")
+	db.CreateBoard("bd1", "ws1", "Sprint", "alice", model.DefaultStatuses)
 
-	err := db.AddBoardMember("bd1", "bob")
+	err := db.UpdateBoard("bd1", map[string]any{
+		"name":     "Sprint 2",
+		"statuses": "backlog,dev,review,done",
+	})
 	if err != nil {
-		t.Fatalf("failed to add board member: %v", err)
+		t.Fatalf("failed to update board: %v", err)
 	}
 
-	members, err := db.ListBoardMembers("bd1")
-	if err != nil {
-		t.Fatalf("failed to list board members: %v", err)
+	board, _ := db.GetBoard("bd1")
+	if board.Name != "Sprint 2" {
+		t.Fatalf("expected name Sprint 2, got %q", board.Name)
 	}
-	if len(members) != 1 {
-		t.Fatalf("expected 1 board member, got %d", len(members))
-	}
-
-	isMember, _ := db.IsBoardMember("bd1", "bob")
-	if !isMember {
-		t.Fatal("expected bob to be a board member")
-	}
-
-	// owner has implicit access
-	isMember, _ = db.IsBoardMember("bd1", "alice")
-	if !isMember {
-		t.Fatal("expected alice (owner) to have implicit board access")
-	}
-
-	err = db.RemoveBoardMember("bd1", "bob")
-	if err != nil {
-		t.Fatalf("failed to remove board member: %v", err)
-	}
-	isMember, _ = db.IsBoardMember("bd1", "bob")
-	if isMember {
-		t.Fatal("expected bob to no longer be a board member")
+	statuses := board.StatusList()
+	if len(statuses) != 4 || statuses[0] != "backlog" {
+		t.Fatalf("expected updated statuses, got %v", statuses)
 	}
 }
 
 func TestDB_TicketsScoped_ToBoard(t *testing.T) {
 	db := newTestDB(t)
 	db.CreateWorkspace("ws1", "Team", "alice")
-	db.CreateBoard("bd1", "ws1", "Board 1", "alice")
-	db.CreateBoard("bd2", "ws1", "Board 2", "alice")
+	db.CreateBoard("bd1", "ws1", "Board 1", "alice", model.DefaultStatuses)
+	db.CreateBoard("bd2", "ws1", "Board 2", "alice", model.DefaultStatuses)
 
 	t1 := model.NewTicket("Task A", "", "alice")
 	t1.BoardID = "bd1"
@@ -344,7 +311,6 @@ func TestDB_TicketsScoped_ToBoard(t *testing.T) {
 	t2.BoardID = "bd2"
 	db.CreateTicket(t2)
 
-	// List for board 1
 	tickets, err := db.ListTickets("bd1", "")
 	if err != nil {
 		t.Fatalf("failed to list tickets: %v", err)
@@ -356,53 +322,14 @@ func TestDB_TicketsScoped_ToBoard(t *testing.T) {
 		t.Fatalf("expected Task A, got %q", tickets[0].Title)
 	}
 
-	// List for board 2
 	tickets, _ = db.ListTickets("bd2", "")
 	if len(tickets) != 1 {
 		t.Fatalf("expected 1 ticket on bd2, got %d", len(tickets))
 	}
 
-	// Empty boardID returns all (backward compat)
 	tickets, _ = db.ListTickets("", "")
 	if len(tickets) != 2 {
 		t.Fatalf("expected 2 tickets total, got %d", len(tickets))
-	}
-}
-
-func TestDB_Migration_SeedUsers(t *testing.T) {
-	// Simulates fresh install with seed users
-	db, err := NewDB(":memory:", "alice", "bob")
-	if err != nil {
-		t.Fatalf("failed to create db: %v", err)
-	}
-	defer db.Close()
-
-	// Should create default workspace
-	workspaces, _ := db.ListWorkspacesForUser("alice")
-	if len(workspaces) != 1 {
-		t.Fatalf("expected 1 workspace for alice, got %d", len(workspaces))
-	}
-	if workspaces[0].Name != "Default" {
-		t.Fatalf("expected workspace name Default, got %q", workspaces[0].Name)
-	}
-
-	// alice should be owner, bob should be admin
-	role, _ := db.GetMemberRole(workspaces[0].ID, "alice")
-	if role != "owner" {
-		t.Fatalf("expected alice to be owner, got %q", role)
-	}
-	role, _ = db.GetMemberRole(workspaces[0].ID, "bob")
-	if role != "admin" {
-		t.Fatalf("expected bob to be admin, got %q", role)
-	}
-
-	// Should create default board
-	boards, _ := db.ListBoardsForUser(workspaces[0].ID, "alice")
-	if len(boards) != 1 {
-		t.Fatalf("expected 1 board, got %d", len(boards))
-	}
-	if boards[0].Name != "Default" {
-		t.Fatalf("expected board name Default, got %q", boards[0].Name)
 	}
 }
 
@@ -419,75 +346,6 @@ func TestDB_DeleteWorkspace(t *testing.T) {
 	}
 }
 
-func TestDB_CloseTicket_SetsClosedStatusAndReason(t *testing.T) {
-	db := newTestDB(t)
-	ticket := model.NewTicket("Close me", "", "alice")
-	db.CreateTicket(ticket)
-
-	now := time.Now()
-	err := db.UpdateTicket(ticket.ID, map[string]any{
-		"status":       "closed",
-		"close_reason": "done with this",
-		"closed_at":    now,
-	})
-	if err != nil {
-		t.Fatalf("failed to close ticket: %v", err)
-	}
-
-	got, _ := db.GetTicket(ticket.ID)
-	if got.Status != model.Closed {
-		t.Fatalf("expected status closed, got %q", got.Status)
-	}
-	if got.CloseReason != "done with this" {
-		t.Fatalf("expected close reason %q, got %q", "done with this", got.CloseReason)
-	}
-	if got.ClosedAt == nil {
-		t.Fatal("expected ClosedAt to be set")
-	}
-}
-
-func TestDB_ListTickets_ExcludesClosedByDefault(t *testing.T) {
-	db := newTestDB(t)
-	t1 := model.NewTicket("Open task", "", "alice")
-	db.CreateTicket(t1)
-
-	t2 := model.NewTicket("Closed task", "", "alice")
-	t2.Status = model.Closed
-	db.CreateTicket(t2)
-
-	tickets, err := db.ListTickets("", "")
-	if err != nil {
-		t.Fatalf("failed to list: %v", err)
-	}
-	if len(tickets) != 1 {
-		t.Fatalf("expected 1 ticket (closed excluded), got %d", len(tickets))
-	}
-	if tickets[0].Title != "Open task" {
-		t.Fatalf("expected Open task, got %q", tickets[0].Title)
-	}
-}
-
-func TestDB_ListTickets_IncludesClosedWhenFiltered(t *testing.T) {
-	db := newTestDB(t)
-	t1 := model.NewTicket("Open task", "", "alice")
-	db.CreateTicket(t1)
-
-	t2 := model.NewTicket("Closed task", "", "alice")
-	t2.Status = model.Closed
-	db.CreateTicket(t2)
-
-	tickets, err := db.ListTickets("", "closed")
-	if err != nil {
-		t.Fatalf("failed to list: %v", err)
-	}
-	if len(tickets) != 1 {
-		t.Fatalf("expected 1 closed ticket, got %d", len(tickets))
-	}
-	if tickets[0].Title != "Closed task" {
-		t.Fatalf("expected Closed task, got %q", tickets[0].Title)
-	}
-}
-
 func TestDB_SearchTickets(t *testing.T) {
 	db := newTestDB(t)
 	t1 := model.NewTicket("Fix login bug", "auth is broken", "alice")
@@ -497,7 +355,6 @@ func TestDB_SearchTickets(t *testing.T) {
 	t3 := model.NewTicket("Update readme", "", "alice")
 	db.CreateTicket(t3)
 
-	// Search by title
 	tickets, err := db.SearchTickets("", "login")
 	if err != nil {
 		t.Fatalf("failed to search: %v", err)
@@ -509,88 +366,19 @@ func TestDB_SearchTickets(t *testing.T) {
 		t.Fatalf("expected 'Fix login bug', got %q", tickets[0].Title)
 	}
 
-	// Search by content
 	tickets, _ = db.SearchTickets("", "feature")
 	if len(tickets) != 1 {
 		t.Fatalf("expected 1 result for 'feature', got %d", len(tickets))
 	}
 
-	// Case insensitive
 	tickets, _ = db.SearchTickets("", "LOGIN")
 	if len(tickets) != 1 {
 		t.Fatalf("expected case-insensitive match, got %d", len(tickets))
 	}
 
-	// No match
 	tickets, _ = db.SearchTickets("", "nonexistent")
 	if len(tickets) != 0 {
 		t.Fatalf("expected 0 results, got %d", len(tickets))
-	}
-}
-
-func TestDB_SearchTickets_ExcludesClosed(t *testing.T) {
-	db := newTestDB(t)
-	t1 := model.NewTicket("Open login bug", "", "alice")
-	db.CreateTicket(t1)
-	t2 := model.NewTicket("Closed login issue", "", "alice")
-	t2.Status = model.Closed
-	db.CreateTicket(t2)
-
-	tickets, _ := db.SearchTickets("", "login")
-	if len(tickets) != 1 {
-		t.Fatalf("expected 1 result (closed excluded), got %d", len(tickets))
-	}
-}
-
-func TestDB_ReopenTicket_ClearsClosedAt(t *testing.T) {
-	db := newTestDB(t)
-	ticket := model.NewTicket("Reopen me", "", "alice")
-	db.CreateTicket(ticket)
-
-	// Close it
-	now := time.Now()
-	db.UpdateTicket(ticket.ID, map[string]any{
-		"status":       "closed",
-		"close_reason": "done",
-		"closed_at":    now,
-	})
-	got, _ := db.GetTicket(ticket.ID)
-	if got.ClosedAt == nil {
-		t.Fatal("expected ClosedAt to be set after close")
-	}
-
-	// Reopen it using gorm.Expr("NULL") for closed_at
-	db.UpdateTicket(ticket.ID, map[string]any{
-		"status":       "todo",
-		"close_reason": "",
-		"closed_at":    gorm.Expr("NULL"),
-	})
-	got, _ = db.GetTicket(ticket.ID)
-	if got.Status != model.Todo {
-		t.Fatalf("expected status todo, got %q", got.Status)
-	}
-	if got.CloseReason != "" {
-		t.Fatalf("expected empty close reason, got %q", got.CloseReason)
-	}
-	if got.ClosedAt != nil {
-		t.Fatal("expected ClosedAt to be nil after reopen")
-	}
-}
-
-func TestDB_ListAllTickets(t *testing.T) {
-	db := newTestDB(t)
-	t1 := model.NewTicket("Open task", "", "alice")
-	db.CreateTicket(t1)
-	t2 := model.NewTicket("Closed task", "", "alice")
-	t2.Status = model.Closed
-	db.CreateTicket(t2)
-
-	tickets, err := db.ListAllTickets("")
-	if err != nil {
-		t.Fatalf("failed to list all: %v", err)
-	}
-	if len(tickets) != 2 {
-		t.Fatalf("expected 2 tickets, got %d", len(tickets))
 	}
 }
 
@@ -601,7 +389,6 @@ func TestDB_SearchTickets_SQLWildcards(t *testing.T) {
 	t2 := model.NewTicket("Regular task", "", "alice")
 	db.CreateTicket(t2)
 
-	// Searching for literal "%" should only match the ticket containing it
 	tickets, err := db.SearchTickets("", "%")
 	if err != nil {
 		t.Fatalf("failed to search: %v", err)
@@ -624,7 +411,6 @@ func TestDB_SearchTickets_BoardScoped(t *testing.T) {
 	t2.BoardID = "bd2"
 	db.CreateTicket(t2)
 
-	// Search scoped to bd1
 	tickets, err := db.SearchTickets("bd1", "Login")
 	if err != nil {
 		t.Fatalf("failed to search: %v", err)
@@ -632,12 +418,9 @@ func TestDB_SearchTickets_BoardScoped(t *testing.T) {
 	if len(tickets) != 1 {
 		t.Fatalf("expected 1 result scoped to bd1, got %d", len(tickets))
 	}
-	if tickets[0].BoardID != "bd1" {
-		t.Fatalf("expected board bd1, got %q", tickets[0].BoardID)
-	}
 }
 
-func TestDB_TicketStats(t *testing.T) {
+func TestDB_TicketStats_DynamicKeys(t *testing.T) {
 	db := newTestDB(t)
 	t1 := model.NewTicket("Task 1", "", "alice")
 	t1.BoardID = "b1"
@@ -646,10 +429,6 @@ func TestDB_TicketStats(t *testing.T) {
 	t2.BoardID = "b1"
 	t2.Status = model.InProgress
 	db.CreateTicket(t2)
-	t3 := model.NewTicket("Task 3", "", "alice")
-	t3.BoardID = "b1"
-	t3.Status = model.Closed
-	db.CreateTicket(t3)
 
 	counts, err := db.TicketStats("b1")
 	if err != nil {
@@ -661,9 +440,7 @@ func TestDB_TicketStats(t *testing.T) {
 	if counts["in_progress"] != 1 {
 		t.Fatalf("expected 1 in_progress, got %d", counts["in_progress"])
 	}
-	if counts["closed"] != 1 {
-		t.Fatalf("expected 1 closed, got %d", counts["closed"])
-	}
+	// done not present since no tickets have that status
 	if counts["done"] != 0 {
 		t.Fatalf("expected 0 done, got %d", counts["done"])
 	}

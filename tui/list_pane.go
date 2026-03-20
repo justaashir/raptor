@@ -20,8 +20,6 @@ func FormatStatus(s model.Status) string {
 		return "IN_PROG"
 	case model.Done:
 		return "DONE"
-	case model.Closed:
-		return "CLOSED"
 	default:
 		return string(s)
 	}

@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"raptor/client"
 
 	"github.com/charmbracelet/glamour"
 	"github.com/spf13/cobra"
@@ -16,7 +15,7 @@ var showCmd = &cobra.Command{
 		if err := requireBoard(); err != nil {
 			return err
 		}
-		c := client.NewScoped(serverURL, authToken, activeWS, activeBoard)
+		c := newClient()
 		ticket, err := c.GetTicket(args[0])
 		if err != nil {
 			return err
@@ -39,12 +38,6 @@ var showCmd = &cobra.Command{
 		}
 		fmt.Printf("Created:  %s\n", ticket.CreatedAt.Format("2006-01-02 15:04"))
 		fmt.Printf("Updated:  %s\n", ticket.UpdatedAt.Format("2006-01-02 15:04"))
-		if ticket.ClosedAt != nil {
-			fmt.Printf("Closed:   %s\n", ticket.ClosedAt.Format("2006-01-02 15:04"))
-		}
-		if ticket.CloseReason != "" {
-			fmt.Printf("Reason:   %s\n", ticket.CloseReason)
-		}
 		if ticket.Content != "" {
 			fmt.Println()
 			rendered, err := glamour.Render(ticket.Content, "dark")

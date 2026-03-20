@@ -27,13 +27,6 @@ func TestFormatStatus_Done(t *testing.T) {
 	}
 }
 
-func TestFormatStatus_Closed(t *testing.T) {
-	got := FormatStatus(model.Closed)
-	if got != "CLOSED" {
-		t.Fatalf("FormatStatus(Closed) = %q, want %q", got, "CLOSED")
-	}
-}
-
 func testTickets() []model.Ticket {
 	now := time.Now()
 	return []model.Ticket{

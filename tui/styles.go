@@ -32,8 +32,6 @@ func StatusColor(s model.Status) lipgloss.Color {
 		return colorCyan
 	case model.Done:
 		return colorGreen
-	case model.Closed:
-		return colorRed
 	default:
 		return colorComment
 	}
@@ -48,8 +46,6 @@ func StatusIcon(s model.Status) string {
 		return "⚡"
 	case model.Done:
 		return "✅"
-	case model.Closed:
-		return "🔒"
 	default:
 		return "📄"
 	}
