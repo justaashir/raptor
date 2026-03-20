@@ -16,6 +16,15 @@ func httpGet(url string) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
+func httpPost(url string, body []byte) ([]byte, error) {
+	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	return io.ReadAll(resp.Body)
+}
+
 func httpPatch(url string, body []byte) ([]byte, error) {
 	req, err := http.NewRequest("PATCH", url, bytes.NewReader(body))
 	if err != nil {

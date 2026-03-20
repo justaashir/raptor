@@ -157,6 +157,12 @@ func (a *App) updateBoard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case key.Matches(msg, keys.Refresh):
 		return a, a.fetchTickets
+	case key.Matches(msg, keys.New):
+		return a, a.addTicket
+	case key.Matches(msg, keys.Edit):
+		if t := a.SelectedTicket(); t != nil {
+			return a, a.editTicket(t)
+		}
 	}
 	return a, nil
 }
@@ -244,6 +250,43 @@ func (a *App) cycleStatus(t *model.Ticket) tea.Cmd {
 	}
 }
 
+func (a *App) addTicket() tea.Msg {
+	title, content, err := NewAddForm()
+	if err != nil || title == "" {
+		return a.fetchTickets()
+	}
+	client := newHTTPClient(a.serverURL)
+	body, _ := json.Marshal(map[string]string{"title": title, "content": content})
+	_, postErr := httpPost(client.baseURL+"/api/tickets", body)
+	if postErr != nil {
+		return errMsg(postErr)
+	}
+	return a.fetchTickets()
+}
+
+func (a *App) editTicket(t *model.Ticket) tea.Cmd {
+	return func() tea.Msg {
+		title, content, err := NewEditForm(t.Title, t.Content)
+		if err != nil {
+			return a.fetchTickets()
+		}
+		fields := map[string]any{}
+		if title != t.Title {
+			fields["title"] = title
+		}
+		if content != t.Content {
+			fields["content"] = content
+		}
+		if len(fields) > 0 {
+			_, err := newHTTPClient(a.serverURL).UpdateTicket(t.ID, fields)
+			if err != nil {
+				return errMsg(err)
+			}
+		}
+		return a.fetchTickets()
+	}
+}
+
 func (a *App) deleteTicket(id string) tea.Cmd {
 	return func() tea.Msg {
 		err := newHTTPClient(a.serverURL).DeleteTicket(id)
@@ -264,6 +307,8 @@ type keyMap struct {
 	Move    key.Binding
 	Delete  key.Binding
 	Refresh key.Binding
+	New     key.Binding
+	Edit    key.Binding
 	Quit    key.Binding
 	Back    key.Binding
 }
@@ -277,6 +322,8 @@ var keys = keyMap{
 	Move:    key.NewBinding(key.WithKeys("m")),
 	Delete:  key.NewBinding(key.WithKeys("d")),
 	Refresh: key.NewBinding(key.WithKeys("r")),
+	New:     key.NewBinding(key.WithKeys("n")),
+	Edit:    key.NewBinding(key.WithKeys("e")),
 	Quit:    key.NewBinding(key.WithKeys("q", "ctrl+c")),
 	Back:    key.NewBinding(key.WithKeys("esc")),
 }

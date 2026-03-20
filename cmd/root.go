@@ -3,7 +3,9 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"raptor/tui"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )
 
@@ -13,6 +15,12 @@ var rootCmd = &cobra.Command{
 	Use:   "raptor",
 	Short: "A multiplayer kanban board",
 	Long:  "Raptor is a CLI kanban board with real-time sync.",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		app := tui.NewApp(serverURL)
+		p := tea.NewProgram(app, tea.WithAltScreen())
+		_, err := p.Run()
+		return err
+	},
 }
 
 func Execute() {
