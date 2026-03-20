@@ -1,4 +1,4 @@
-package cmd
+package client
 
 import (
 	"bytes"
@@ -17,11 +17,11 @@ type Client struct {
 	http      *http.Client
 }
 
-func NewClient(baseURL, token string) *Client {
+func New(baseURL, token string) *Client {
 	return &Client{baseURL: baseURL, token: token, http: &http.Client{}}
 }
 
-func NewScopedClient(baseURL, token, workspace, board string) *Client {
+func NewScoped(baseURL, token, workspace, board string) *Client {
 	return &Client{baseURL: baseURL, token: token, workspace: workspace, board: board, http: &http.Client{}}
 }
 

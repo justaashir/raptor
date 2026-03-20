@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os/exec"
+	"raptor/client"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -54,7 +55,7 @@ var loginCmd = &cobra.Command{
 		}
 
 		// Auto-select workspace/board if user has exactly one of each
-		c := NewClient(serverURL, result.Token)
+		c := client.New(serverURL, result.Token)
 		workspaces, err := c.ListWorkspaces()
 		if err == nil && len(workspaces) == 1 {
 			cfg.Workspace = workspaces[0].ID
