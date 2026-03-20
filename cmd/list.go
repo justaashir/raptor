@@ -68,7 +68,7 @@ var listCmd = &cobra.Command{
 			return err
 		}
 		c := client.NewScoped(serverURL, authToken, activeWS, activeBoard)
-		tickets, err := c.ListTickets(listStatus, listMine, listAll)
+		tickets, err := c.ListTickets(client.ListOptions{Status: listStatus, Mine: listMine, All: listAll})
 		if err != nil {
 			return err
 		}

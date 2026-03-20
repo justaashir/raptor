@@ -67,28 +67,41 @@ func (c *Client) CreateTicket(title, content, assignee string) (model.Ticket, er
 	return ticket, nil
 }
 
-func (c *Client) ListTickets(status string, mine bool, all ...bool) ([]model.Ticket, error) {
-	url := c.ticketsURL()
+// ListOptions configures the ListTickets request.
+type ListOptions struct {
+	Status string
+	Mine   bool
+	All    bool
+}
+
+func (c *Client) ListTickets(opts ListOptions) ([]model.Ticket, error) {
+	u := c.ticketsURL()
 	sep := "?"
-	if len(all) > 0 && all[0] {
-		url += sep + "all=true"
+	if opts.All {
+		u += sep + "all=true"
 		sep = "&"
 	}
-	if status != "" {
-		url += sep + "status=" + status
+	if opts.Status != "" {
+		u += sep + "status=" + url.QueryEscape(opts.Status)
 		sep = "&"
 	}
-	if mine {
-		url += sep + "mine=true"
+	if opts.Mine {
+		u += sep + "mine=true"
 	}
-	req, _ := http.NewRequest("GET", url, nil)
+	req, _ := http.NewRequest("GET", u, nil)
 	resp, err := c.do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		msg, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("unexpected status: %d: %s", resp.StatusCode, msg)
+	}
 	var tickets []model.Ticket
-	json.NewDecoder(resp.Body).Decode(&tickets)
+	if err := json.NewDecoder(resp.Body).Decode(&tickets); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
 	return tickets, nil
 }
 
@@ -99,8 +112,14 @@ func (c *Client) SearchTickets(query string) ([]model.Ticket, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		msg, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("unexpected status: %d: %s", resp.StatusCode, msg)
+	}
 	var tickets []model.Ticket
-	json.NewDecoder(resp.Body).Decode(&tickets)
+	if err := json.NewDecoder(resp.Body).Decode(&tickets); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
 	return tickets, nil
 }
 
@@ -111,8 +130,14 @@ func (c *Client) TicketStats() (map[string]any, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		msg, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("unexpected status: %d: %s", resp.StatusCode, msg)
+	}
 	var result map[string]any
-	json.NewDecoder(resp.Body).Decode(&result)
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decode response: %w", err)
+	}
 	return result, nil
 }
 

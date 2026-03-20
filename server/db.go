@@ -267,10 +267,13 @@ func (db *DB) ListTickets(boardID, status string) ([]model.Ticket, error) {
 	return tickets, err
 }
 
+// likeEscaper escapes SQL LIKE wildcards in user input.
+var likeEscaper = strings.NewReplacer("%", "\\%", "_", "\\_")
+
 func (db *DB) SearchTickets(boardID, query string) ([]model.Ticket, error) {
 	var tickets []model.Ticket
 	// Escape LIKE wildcards in user input
-	escaped := strings.NewReplacer("%", "\\%", "_", "\\_").Replace(query)
+	escaped := likeEscaper.Replace(query)
 	q := db.conn.Model(&model.Ticket{}).
 		Where("status != ?", model.Closed).
 		Where("(title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\')", "%"+escaped+"%", "%"+escaped+"%")

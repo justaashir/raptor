@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"regexp"
 )
 
 //go:embed skill/SKILL.md
@@ -68,15 +70,26 @@ fi
 	w.Write([]byte(script))
 }
 
+// validHost matches safe hostname:port values only.
+var validHost = regexp.MustCompile(`^[a-zA-Z0-9._:-]+$`)
+
 // serverBaseURL derives the server's public URL from the request.
+// Prefers SERVER_BASE_URL env var if set. Validates headers to prevent injection.
 func serverBaseURL(r *http.Request) string {
+	if base := os.Getenv("SERVER_BASE_URL"); base != "" {
+		return base
+	}
 	scheme := "https"
 	if r.TLS == nil {
-		if fwd := r.Header.Get("X-Forwarded-Proto"); fwd != "" {
+		if fwd := r.Header.Get("X-Forwarded-Proto"); fwd == "http" || fwd == "https" {
 			scheme = fwd
 		} else {
 			scheme = "http"
 		}
 	}
-	return fmt.Sprintf("%s://%s", scheme, r.Host)
+	host := r.Host
+	if !validHost.MatchString(host) {
+		return "https://raptor.raptorthree.com"
+	}
+	return fmt.Sprintf("%s://%s", scheme, host)
 }

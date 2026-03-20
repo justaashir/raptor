@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"raptor/model"
+	"strings"
 	"testing"
 )
 
@@ -42,7 +43,7 @@ func TestClient_ListTickets(t *testing.T) {
 	defer ts.Close()
 
 	c := NewScoped(ts.URL, "", "ws1", "bd1")
-	tickets, err := c.ListTickets("", false)
+	tickets, err := c.ListTickets(ListOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +114,7 @@ func TestClient_AuthHeader(t *testing.T) {
 	defer ts.Close()
 
 	c := NewScoped(ts.URL, "test-token", "ws1", "bd1")
-	_, err := c.ListTickets("", false)
+	_, err := c.ListTickets(ListOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +129,7 @@ func TestClient_ScopedURLs(t *testing.T) {
 	defer ts.Close()
 
 	c := NewScoped(ts.URL, "", "ws1", "bd1")
-	c.ListTickets("", false)
+	c.ListTickets(ListOptions{})
 	expected := "/api/workspaces/ws1/boards/bd1/tickets"
 	if gotPath != expected {
 		t.Fatalf("expected %s, got %s", expected, gotPath)
@@ -188,5 +189,120 @@ func TestClient_CreateBoard(t *testing.T) {
 	}
 	if bd.Name != "Sprint" {
 		t.Fatalf("expected Sprint, got %s", bd.Name)
+	}
+}
+
+func TestClient_ListTickets_WithAllFlag(t *testing.T) {
+	var gotQuery string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		json.NewEncoder(w).Encode([]model.Ticket{})
+	}))
+	defer ts.Close()
+
+	c := NewScoped(ts.URL, "", "ws1", "bd1")
+	c.ListTickets(ListOptions{All: true})
+	if !strings.Contains(gotQuery, "all=true") {
+		t.Fatalf("expected all=true in query, got %q", gotQuery)
+	}
+}
+
+func TestClient_ListTickets_StatusEncoded(t *testing.T) {
+	var gotQuery string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		json.NewEncoder(w).Encode([]model.Ticket{})
+	}))
+	defer ts.Close()
+
+	c := NewScoped(ts.URL, "", "ws1", "bd1")
+	c.ListTickets(ListOptions{Status: "in_progress"})
+	if !strings.Contains(gotQuery, "status=in_progress") {
+		t.Fatalf("expected status=in_progress in query, got %q", gotQuery)
+	}
+}
+
+func TestClient_SearchTickets(t *testing.T) {
+	var gotQuery string
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		json.NewEncoder(w).Encode([]model.Ticket{{ID: "a", Title: "Found"}})
+	}))
+	defer ts.Close()
+
+	c := NewScoped(ts.URL, "", "ws1", "bd1")
+	tickets, err := c.SearchTickets("hello world")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tickets) != 1 {
+		t.Fatalf("expected 1 ticket, got %d", len(tickets))
+	}
+	if !strings.Contains(gotQuery, "q=hello+world") {
+		t.Fatalf("expected URL-encoded query, got %q", gotQuery)
+	}
+}
+
+func TestClient_TicketStats(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("stats") != "true" {
+			t.Fatalf("expected stats=true, got %q", r.URL.RawQuery)
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"total":  3,
+			"counts": map[string]any{"todo": 2, "done": 1},
+		})
+	}))
+	defer ts.Close()
+
+	c := NewScoped(ts.URL, "", "ws1", "bd1")
+	result, err := c.TicketStats()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result["total"].(float64) != 3 {
+		t.Fatalf("expected total 3, got %v", result["total"])
+	}
+}
+
+func TestClient_UpdateTicket_ServerError(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "bad request", http.StatusBadRequest)
+	}))
+	defer ts.Close()
+
+	c := NewScoped(ts.URL, "", "ws1", "bd1")
+	_, err := c.UpdateTicket("abc", map[string]any{"status": "banana"})
+	if err == nil {
+		t.Fatal("expected error for 400 response")
+	}
+	if !strings.Contains(err.Error(), "400") {
+		t.Fatalf("expected error to contain status code, got %q", err.Error())
+	}
+}
+
+func TestClient_SearchTickets_ServerError(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "server error", http.StatusInternalServerError)
+	}))
+	defer ts.Close()
+
+	c := NewScoped(ts.URL, "", "ws1", "bd1")
+	_, err := c.SearchTickets("test")
+	if err == nil {
+		t.Fatal("expected error for 500 response")
+	}
+}
+
+func TestClient_ListTickets_DecodeError(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("not json"))
+	}))
+	defer ts.Close()
+
+	c := NewScoped(ts.URL, "", "ws1", "bd1")
+	_, err := c.ListTickets(ListOptions{})
+	if err == nil {
+		t.Fatal("expected error for malformed JSON")
 	}
 }

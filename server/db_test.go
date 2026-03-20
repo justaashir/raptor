@@ -614,6 +614,29 @@ func TestDB_SearchTickets_SQLWildcards(t *testing.T) {
 	}
 }
 
+func TestDB_SearchTickets_BoardScoped(t *testing.T) {
+	db := newTestDB(t)
+	t1 := model.NewTicket("Login bug", "", "alice")
+	t1.BoardID = "bd1"
+	db.CreateTicket(t1)
+
+	t2 := model.NewTicket("Login issue", "", "alice")
+	t2.BoardID = "bd2"
+	db.CreateTicket(t2)
+
+	// Search scoped to bd1
+	tickets, err := db.SearchTickets("bd1", "Login")
+	if err != nil {
+		t.Fatalf("failed to search: %v", err)
+	}
+	if len(tickets) != 1 {
+		t.Fatalf("expected 1 result scoped to bd1, got %d", len(tickets))
+	}
+	if tickets[0].BoardID != "bd1" {
+		t.Fatalf("expected board bd1, got %q", tickets[0].BoardID)
+	}
+}
+
 func TestDB_TicketStats(t *testing.T) {
 	db := newTestDB(t)
 	t1 := model.NewTicket("Task 1", "", "alice")

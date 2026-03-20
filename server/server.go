@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"log"
 	"raptor/model"
 	"strings"
 	"time"
@@ -14,6 +15,11 @@ import (
 	"gorm.io/gorm"
 	"nhooyr.io/websocket"
 )
+
+var allowedPatchFields = map[string]bool{
+	"title": true, "content": true, "status": true,
+	"assignee": true, "close_reason": true,
+}
 
 type Server struct {
 	db           *DB
@@ -490,7 +496,8 @@ func (s *Server) handleBoardTickets(w http.ResponseWriter, r *http.Request, wid,
 			tickets, err = s.db.ListTickets(bid, status)
 		}
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Printf("ticket list error: %v", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
 		if mine == "true" && username != "" {
@@ -572,14 +579,14 @@ func (s *Server) handleBoardTicket(w http.ResponseWriter, r *http.Request, wid, 
 			return
 		}
 		// Whitelist allowed fields to prevent mass assignment
-		allowed := map[string]bool{
-			"title": true, "content": true, "status": true,
-			"assignee": true, "close_reason": true,
-		}
 		for k := range fields {
-			if !allowed[k] {
+			if !allowedPatchFields[k] {
 				delete(fields, k)
 			}
+		}
+		if len(fields) == 0 {
+			http.Error(w, `{"error":"no valid fields"}`, http.StatusBadRequest)
+			return
 		}
 		// Validate status if provided
 		if s, ok := fields["status"].(string); ok {
@@ -607,7 +614,8 @@ func (s *Server) handleBoardTicket(w http.ResponseWriter, r *http.Request, wid, 
 			fields["assigned_by"] = UsernameFromContext(r.Context())
 		}
 		if err := s.db.UpdateTicket(tid, fields); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Printf("ticket update error: %v", err)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
 			return
 		}
 		s.hub.Broadcast([]byte(`{"event":"ticket_changed"}`))

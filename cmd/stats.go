@@ -27,26 +27,17 @@ var statsCmd = &cobra.Command{
 			"todo": 0, "in_progress": 0, "done": 0, "closed": 0,
 		}
 
-		if rawCounts, ok := result["counts"].(map[string]any); ok {
-			// Server supports stats endpoint
-			for k, v := range rawCounts {
-				if n, ok := v.(float64); ok {
-					counts[k] = int(n)
-				}
+		rawCounts, ok := result["counts"].(map[string]any)
+		if !ok {
+			return fmt.Errorf("unexpected stats response format")
+		}
+		for k, v := range rawCounts {
+			if n, ok := v.(float64); ok {
+				counts[k] = int(n)
 			}
-			if t, ok := result["total"].(float64); ok {
-				total = int(t)
-			}
-		} else {
-			// Fallback: server returned ticket list, count client-side
-			tickets, err := c.ListTickets("", false, true)
-			if err != nil {
-				return err
-			}
-			for _, t := range tickets {
-				counts[string(t.Status)]++
-			}
-			total = len(tickets)
+		}
+		if t, ok := result["total"].(float64); ok {
+			total = int(t)
 		}
 
 		if jsonOutput {
