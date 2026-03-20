@@ -7,12 +7,14 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/glamour/styles"
 	"github.com/charmbracelet/lipgloss"
 )
 
 // DetailPane wraps a bubbles/viewport for displaying ticket details.
 type DetailPane struct {
 	viewport viewport.Model
+	renderer *glamour.TermRenderer
 	width    int
 	height   int
 }
@@ -21,15 +23,37 @@ type DetailPane struct {
 func NewDetailPane(width, height int) *DetailPane {
 	vp := viewport.New(width, height)
 	vp.SetContent("No ticket selected")
+
+	renderer := newGlamourRenderer(width)
+
 	return &DetailPane{
 		viewport: vp,
+		renderer: renderer,
 		width:    width,
 		height:   height,
 	}
 }
 
+// newGlamourRenderer creates a cached glamour renderer with proper styling.
+func newGlamourRenderer(width int) *glamour.TermRenderer {
+	contentWidth := width - 4
+	if contentWidth < 20 {
+		contentWidth = 20
+	}
+	r, err := glamour.NewTermRenderer(
+		glamour.WithStandardStyle(styles.DarkStyle),
+		glamour.WithWordWrap(contentWidth),
+		glamour.WithEmoji(),
+	)
+	if err != nil {
+		return nil
+	}
+	return r
+}
+
 // RenderDetailContent renders ticket detail as a string. Returns placeholder for nil ticket.
-func RenderDetailContent(t *model.Ticket, width int) string {
+// Accepts an optional cached glamour renderer for performance.
+func RenderDetailContent(t *model.Ticket, width int, renderer ...*glamour.TermRenderer) string {
 	if t == nil {
 		return "No ticket selected"
 	}
@@ -70,15 +94,14 @@ func RenderDetailContent(t *model.Ticket, width int) string {
 
 	var body string
 	if t.Content != "" {
-		contentWidth := width - 4
-		if contentWidth < 20 {
-			contentWidth = 20
+		// Use cached renderer if provided, otherwise create one
+		var r *glamour.TermRenderer
+		if len(renderer) > 0 && renderer[0] != nil {
+			r = renderer[0]
+		} else {
+			r = newGlamourRenderer(width)
 		}
-		r, err := glamour.NewTermRenderer(
-			glamour.WithAutoStyle(),
-			glamour.WithWordWrap(contentWidth),
-		)
-		if err == nil {
+		if r != nil {
 			rendered, err := r.Render(t.Content)
 			if err == nil {
 				body = rendered
@@ -97,7 +120,7 @@ func RenderDetailContent(t *model.Ticket, width int) string {
 
 // SetTicket updates the detail pane with a new ticket.
 func (dp *DetailPane) SetTicket(t *model.Ticket) {
-	content := RenderDetailContent(t, dp.width)
+	content := RenderDetailContent(t, dp.width, dp.renderer)
 	dp.viewport.SetContent(content)
 	dp.viewport.GotoTop()
 }
@@ -114,10 +137,11 @@ func (dp *DetailPane) View() string {
 	return dp.viewport.View()
 }
 
-// SetSize updates the pane dimensions.
+// SetSize updates the pane dimensions and recreates the glamour renderer.
 func (dp *DetailPane) SetSize(width, height int) {
 	dp.width = width
 	dp.height = height
 	dp.viewport.Width = width
 	dp.viewport.Height = height
+	dp.renderer = newGlamourRenderer(width)
 }

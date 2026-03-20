@@ -190,7 +190,7 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.quitting = true
 		return a, tea.Quit
 
-	case key.Matches(msg, keys.Tab):
+	case key.Matches(msg, keys.Tab), key.Matches(msg, keys.Left), key.Matches(msg, keys.Right):
 		a.toggleFocus()
 		return a, nil
 
