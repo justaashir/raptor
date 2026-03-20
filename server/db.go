@@ -26,8 +26,11 @@ func NewDB(dsn string) (*DB, error) {
 		return nil, err
 	}
 
-	// Enable foreign keys
+	// Enable foreign keys and WAL mode for concurrent reads
 	if err := conn.Exec("PRAGMA foreign_keys = ON").Error; err != nil {
+		return nil, err
+	}
+	if err := conn.Exec("PRAGMA journal_mode = WAL").Error; err != nil {
 		return nil, err
 	}
 
@@ -185,16 +188,6 @@ func (db *DB) UpdateBoard(id string, fields map[string]any) error {
 
 func (db *DB) CreateTicket(t model.Ticket) error {
 	return db.conn.Create(&t).Error
-}
-
-func (db *DB) ListAllTickets(boardID string) ([]model.Ticket, error) {
-	var tickets []model.Ticket
-	q := db.conn.Model(&model.Ticket{})
-	if boardID != "" {
-		q = q.Where("board_id = ?", boardID)
-	}
-	err := q.Order("created_at DESC").Find(&tickets).Error
-	return tickets, err
 }
 
 func (db *DB) ListTickets(boardID, status string) ([]model.Ticket, error) {

@@ -29,18 +29,10 @@ type Ticket struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
-func ValidStatus(s Status) bool {
-	switch s {
-	case Todo, InProgress, Done:
-		return true
-	}
-	return false
-}
-
 func NewTicket(title, content, createdBy string) Ticket {
 	now := time.Now()
 	return Ticket{
-		ID:        uuid.New().String()[:8],
+		ID:        uuid.New().String()[:12],
 		Title:     title,
 		Content:   content,
 		Status:    Todo,

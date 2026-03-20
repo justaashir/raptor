@@ -18,8 +18,8 @@ var bdCreateCmd = &cobra.Command{
 	Short: "Create a new board",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if activeWS == "" {
-			return fmt.Errorf("no workspace selected. Run 'raptor workspace use' first")
+		if err := requireWorkspace(); err != nil {
+			return err
 		}
 		var statuses []string
 		if cmd.Flags().Changed("statuses") {
@@ -52,8 +52,8 @@ var bdListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List boards in the active workspace",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if activeWS == "" {
-			return fmt.Errorf("no workspace selected. Run 'raptor workspace use' first")
+		if err := requireWorkspace(); err != nil {
+			return err
 		}
 		c := newUnscopedClient()
 		boards, err := c.ListBoards(activeWS)
@@ -84,8 +84,8 @@ var bdUseCmd = &cobra.Command{
 	Short: "Set active board",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if activeWS == "" {
-			return fmt.Errorf("no workspace selected. Run 'raptor workspace use' first")
+		if err := requireWorkspace(); err != nil {
+			return err
 		}
 		c := newUnscopedClient()
 		boards, err := c.ListBoards(activeWS)

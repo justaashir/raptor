@@ -15,3 +15,9 @@ dist/
 # IDE
 .idea
 .vscode
+
+# Dev artifacts
+.superpowers/
+findings.md
+progress.md
+task_plan.md

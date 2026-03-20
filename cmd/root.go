@@ -89,6 +89,14 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "output as JSON")
 }
 
+// requireWorkspace returns an error if workspace is not set.
+func requireWorkspace() error {
+	if activeWS == "" {
+		return fmt.Errorf("no workspace selected. Run 'raptor workspace use' first")
+	}
+	return nil
+}
+
 // requireBoard returns an error if workspace or board is not set.
 func requireBoard() error {
 	if activeWS == "" || activeBoard == "" {
