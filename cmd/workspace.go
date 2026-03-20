@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"raptor/client"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -19,7 +18,7 @@ var wsCreateCmd = &cobra.Command{
 	Short: "Create a new workspace",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c := client.New(serverURL, authToken)
+		c := newUnscopedClient()
 		ws, err := c.CreateWorkspace(args[0])
 		if err != nil {
 			return err
@@ -37,7 +36,7 @@ var wsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List your workspaces",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c := client.New(serverURL, authToken)
+		c := newUnscopedClient()
 		workspaces, err := c.ListWorkspaces()
 		if err != nil {
 			return err
@@ -66,7 +65,7 @@ var wsUseCmd = &cobra.Command{
 	Short: "Set active workspace",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c := client.New(serverURL, authToken)
+		c := newUnscopedClient()
 		workspaces, err := c.ListWorkspaces()
 		if err != nil {
 			return err
@@ -94,7 +93,7 @@ var wsMembersCmd = &cobra.Command{
 		if activeWS == "" {
 			return fmt.Errorf("no workspace selected. Run 'raptor workspace use' first")
 		}
-		c := client.New(serverURL, authToken)
+		c := newUnscopedClient()
 		members, err := c.ListWorkspaceMembers(activeWS)
 		if err != nil {
 			return err
@@ -120,7 +119,7 @@ var wsInviteCmd = &cobra.Command{
 		if activeWS == "" {
 			return fmt.Errorf("no workspace selected. Run 'raptor workspace use' first")
 		}
-		c := client.New(serverURL, authToken)
+		c := newUnscopedClient()
 		if err := c.InviteWorkspaceMember(activeWS, args[0], inviteRole); err != nil {
 			return err
 		}
@@ -137,7 +136,7 @@ var wsKickCmd = &cobra.Command{
 		if activeWS == "" {
 			return fmt.Errorf("no workspace selected. Run 'raptor workspace use' first")
 		}
-		c := client.New(serverURL, authToken)
+		c := newUnscopedClient()
 		if err := c.KickWorkspaceMember(activeWS, args[0]); err != nil {
 			return err
 		}
@@ -155,7 +154,7 @@ var wsRoleCmd = &cobra.Command{
 		if activeWS == "" {
 			return fmt.Errorf("no workspace selected. Run 'raptor workspace use' first")
 		}
-		c := client.New(serverURL, authToken)
+		c := newUnscopedClient()
 		if err := c.ChangeRole(activeWS, args[0], args[1]); err != nil {
 			return err
 		}

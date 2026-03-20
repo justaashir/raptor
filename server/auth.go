@@ -1,59 +1,43 @@
 package server
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
 	"fmt"
 	"net/http"
 	"raptor/model"
 	"strings"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
 )
 
 const tokenTTL = 30 * 24 * time.Hour
 
-func GenerateToken(username, secret string) string {
-	expiry := time.Now().Add(tokenTTL).Unix()
-	payload := fmt.Sprintf("%s:%d", username, expiry)
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write([]byte(payload))
-	sig := hex.EncodeToString(mac.Sum(nil))
-	raw := fmt.Sprintf("%s:%d:%s", username, expiry, sig)
-	return base64.RawURLEncoding.EncodeToString([]byte(raw))
+func GenerateToken(username, secret string) (string, error) {
+	claims := jwt.RegisteredClaims{
+		Subject:   username,
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(tokenTTL)),
+		IssuedAt:  jwt.NewNumericDate(time.Now()),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(secret))
 }
 
-func ValidateToken(token, secret string) (string, error) {
-	raw, err := base64.RawURLEncoding.DecodeString(token)
+func ValidateToken(tokenStr, secret string) (string, error) {
+	token, err := jwt.ParseWithClaims(tokenStr, &jwt.RegisteredClaims{}, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return []byte(secret), nil
+	})
 	if err != nil {
-		return "", fmt.Errorf("invalid token encoding")
+		return "", fmt.Errorf("invalid token: %w", err)
 	}
-	parts := strings.SplitN(string(raw), ":", 3)
-	if len(parts) != 3 {
-		return "", fmt.Errorf("invalid token format")
+	sub, err := token.Claims.GetSubject()
+	if err != nil || sub == "" {
+		return "", fmt.Errorf("invalid token: missing subject")
 	}
-	username := parts[0]
-	expiryStr := parts[1]
-	sig := parts[2]
-
-	payload := fmt.Sprintf("%s:%s", username, expiryStr)
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write([]byte(payload))
-	expected := hex.EncodeToString(mac.Sum(nil))
-	if !hmac.Equal([]byte(sig), []byte(expected)) {
-		return "", fmt.Errorf("invalid token signature")
-	}
-
-	var expiry int64
-	fmt.Sscanf(expiryStr, "%d", &expiry)
-	if time.Now().Unix() > expiry {
-		return "", fmt.Errorf("token expired")
-	}
-
-	return username, nil
+	return sub, nil
 }
 
 func (s *Server) authMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
@@ -108,7 +92,10 @@ func (s *Server) handleAuth(c echo.Context) error {
 		}
 	}
 
-	token := GenerateToken(input.Username, s.secret)
+	token, err := GenerateToken(input.Username, s.secret)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to generate token"})
+	}
 	return c.JSON(http.StatusOK, map[string]string{
 		"token":    token,
 		"username": input.Username,

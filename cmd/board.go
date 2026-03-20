@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"raptor/client"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -22,7 +21,7 @@ var bdCreateCmd = &cobra.Command{
 		if activeWS == "" {
 			return fmt.Errorf("no workspace selected. Run 'raptor workspace use' first")
 		}
-		c := client.New(serverURL, authToken)
+		c := newUnscopedClient()
 		bd, err := c.CreateBoard(activeWS, args[0])
 		if err != nil {
 			return err
@@ -43,7 +42,7 @@ var bdListCmd = &cobra.Command{
 		if activeWS == "" {
 			return fmt.Errorf("no workspace selected. Run 'raptor workspace use' first")
 		}
-		c := client.New(serverURL, authToken)
+		c := newUnscopedClient()
 		boards, err := c.ListBoards(activeWS)
 		if err != nil {
 			return err
@@ -75,7 +74,7 @@ var bdUseCmd = &cobra.Command{
 		if activeWS == "" {
 			return fmt.Errorf("no workspace selected. Run 'raptor workspace use' first")
 		}
-		c := client.New(serverURL, authToken)
+		c := newUnscopedClient()
 		boards, err := c.ListBoards(activeWS)
 		if err != nil {
 			return err
@@ -103,7 +102,7 @@ var bdMembersCmd = &cobra.Command{
 		if err := requireBoard(); err != nil {
 			return err
 		}
-		c := client.New(serverURL, authToken)
+		c := newUnscopedClient()
 		members, err := c.ListBoardMembers(activeWS, activeBoard)
 		if err != nil {
 			return err
@@ -131,7 +130,7 @@ var bdGrantCmd = &cobra.Command{
 		if err := requireBoard(); err != nil {
 			return err
 		}
-		c := client.New(serverURL, authToken)
+		c := newUnscopedClient()
 		if err := c.GrantBoardAccess(activeWS, activeBoard, args[0]); err != nil {
 			return err
 		}
@@ -148,7 +147,7 @@ var bdRevokeCmd = &cobra.Command{
 		if err := requireBoard(); err != nil {
 			return err
 		}
-		c := client.New(serverURL, authToken)
+		c := newUnscopedClient()
 		if err := c.RevokeBoardAccess(activeWS, activeBoard, args[0]); err != nil {
 			return err
 		}

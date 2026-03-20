@@ -10,6 +10,15 @@ import (
 	"testing"
 )
 
+func mustToken(t *testing.T, username, secret string) string {
+	t.Helper()
+	tok, err := GenerateToken(username, secret)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+	return tok
+}
+
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
 	db, err := NewDB(":memory:")
@@ -59,7 +68,7 @@ func ticketURL(wsID, bdID string) string {
 
 func TestServer_CreateAndListTickets(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
-	token := GenerateToken("alice", "secret")
+	token := mustToken(t, "alice", "secret")
 	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
 
 	body := `{"title":"Test ticket","content":"# Hello"}`
@@ -98,7 +107,7 @@ func TestServer_CreateAndListTickets(t *testing.T) {
 
 func TestServer_GetTicket(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
-	token := GenerateToken("alice", "secret")
+	token := mustToken(t, "alice", "secret")
 	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
 
 	ticket := model.NewTicket("Get me", "content", "alice")
@@ -123,7 +132,7 @@ func TestServer_GetTicket(t *testing.T) {
 
 func TestServer_UpdateTicket(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
-	token := GenerateToken("alice", "secret")
+	token := mustToken(t, "alice", "secret")
 	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
 
 	ticket := model.NewTicket("Original", "", "alice")
@@ -149,7 +158,7 @@ func TestServer_UpdateTicket(t *testing.T) {
 
 func TestServer_DeleteTicket(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
-	token := GenerateToken("alice", "secret")
+	token := mustToken(t, "alice", "secret")
 	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
 
 	ticket := model.NewTicket("To delete", "", "alice")
@@ -173,7 +182,7 @@ func TestServer_DeleteTicket(t *testing.T) {
 
 func TestServer_GetTicket_NotFound(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
-	token := GenerateToken("alice", "secret")
+	token := mustToken(t, "alice", "secret")
 	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
 
 	req := httptest.NewRequest("GET", ticketURL(wsID, bdID)+"/nonexist", nil)
@@ -188,7 +197,7 @@ func TestServer_GetTicket_NotFound(t *testing.T) {
 
 func TestServer_CreateWorkspace(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
-	token := GenerateToken("alice", "secret")
+	token := mustToken(t, "alice", "secret")
 
 	body := `{"name":"My Team"}`
 	req := httptest.NewRequest("POST", "/api/workspaces/", strings.NewReader(body))
@@ -216,7 +225,7 @@ func TestServer_CreateWorkspace(t *testing.T) {
 
 func TestServer_ListWorkspaces(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
-	token := GenerateToken("alice", "secret")
+	token := mustToken(t, "alice", "secret")
 
 	body := `{"name":"Team A"}`
 	req := httptest.NewRequest("POST", "/api/workspaces/", strings.NewReader(body))
@@ -246,8 +255,8 @@ func TestServer_ListWorkspaces(t *testing.T) {
 
 func TestServer_Authorization_MemberCantCreateBoard(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice", "bob"})
-	tokenAlice := GenerateToken("alice", "secret")
-	tokenBob := GenerateToken("bob", "secret")
+	tokenAlice := mustToken(t, "alice", "secret")
+	tokenBob := mustToken(t, "bob", "secret")
 
 	body := `{"name":"Team"}`
 	req := httptest.NewRequest("POST", "/api/workspaces/", strings.NewReader(body))
@@ -279,7 +288,7 @@ func TestServer_Authorization_MemberCantCreateBoard(t *testing.T) {
 
 func TestServer_BoardScopedTickets(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
-	token := GenerateToken("alice", "secret")
+	token := mustToken(t, "alice", "secret")
 	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
 
 	body := `{"title":"Task 1"}`
@@ -340,7 +349,7 @@ func TestServer_Auth_ChecksWorkspaceMembership(t *testing.T) {
 
 func TestServer_WorkspaceMembers(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice", "bob"})
-	tokenAlice := GenerateToken("alice", "secret")
+	tokenAlice := mustToken(t, "alice", "secret")
 
 	body := `{"name":"Team"}`
 	req := httptest.NewRequest("POST", "/api/workspaces/", strings.NewReader(body))
@@ -392,7 +401,7 @@ func TestServer_WorkspaceMembers(t *testing.T) {
 
 func TestServer_WorkspaceInviteDuplicate(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice", "bob"})
-	tokenAlice := GenerateToken("alice", "secret")
+	tokenAlice := mustToken(t, "alice", "secret")
 
 	body := `{"name":"Team"}`
 	req := httptest.NewRequest("POST", "/api/workspaces/", strings.NewReader(body))
@@ -427,8 +436,8 @@ func TestServer_WorkspaceInviteDuplicate(t *testing.T) {
 
 func TestServer_BoardMembers(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice", "bob"})
-	tokenAlice := GenerateToken("alice", "secret")
-	tokenBob := GenerateToken("bob", "secret")
+	tokenAlice := mustToken(t, "alice", "secret")
+	tokenBob := mustToken(t, "bob", "secret")
 
 	body := `{"name":"Team"}`
 	req := httptest.NewRequest("POST", "/api/workspaces/", strings.NewReader(body))
@@ -497,8 +506,8 @@ func TestServer_BoardMembers(t *testing.T) {
 
 func TestServer_DeleteWorkspace_OwnerOnly(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice", "bob"})
-	tokenAlice := GenerateToken("alice", "secret")
-	tokenBob := GenerateToken("bob", "secret")
+	tokenAlice := mustToken(t, "alice", "secret")
+	tokenBob := mustToken(t, "bob", "secret")
 
 	body := `{"name":"Team"}`
 	req := httptest.NewRequest("POST", "/api/workspaces/", strings.NewReader(body))
@@ -537,7 +546,7 @@ func TestServer_DeleteWorkspace_OwnerOnly(t *testing.T) {
 
 func TestServer_CreatedByFromAuth(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
-	token := GenerateToken("alice", "secret")
+	token := mustToken(t, "alice", "secret")
 	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
 
 	body := `{"title":"Auth ticket","content":""}`
@@ -560,7 +569,7 @@ func TestServer_CreatedByFromAuth(t *testing.T) {
 
 func TestServer_SearchTickets(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
-	token := GenerateToken("alice", "secret")
+	token := mustToken(t, "alice", "secret")
 	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
 
 	for _, title := range []string{"Fix login bug", "Add dashboard", "Update readme"} {
@@ -589,7 +598,7 @@ func TestServer_SearchTickets(t *testing.T) {
 
 func TestServer_ListTickets_ExcludesClosedByDefault(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
-	token := GenerateToken("alice", "secret")
+	token := mustToken(t, "alice", "secret")
 	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
 
 	// Create open ticket
@@ -641,7 +650,7 @@ func TestServer_ListTickets_ExcludesClosedByDefault(t *testing.T) {
 
 func TestServer_ReopenTicket(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
-	token := GenerateToken("alice", "secret")
+	token := mustToken(t, "alice", "secret")
 	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
 
 	// Create and close a ticket
@@ -689,7 +698,7 @@ func TestServer_ReopenTicket(t *testing.T) {
 
 func TestServer_PatchRejectsInvalidStatus(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
-	token := GenerateToken("alice", "secret")
+	token := mustToken(t, "alice", "secret")
 	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
 
 	body := `{"title":"Test"}`
@@ -714,7 +723,7 @@ func TestServer_PatchRejectsInvalidStatus(t *testing.T) {
 
 func TestServer_PatchStripsProtectedFields(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
-	token := GenerateToken("alice", "secret")
+	token := mustToken(t, "alice", "secret")
 	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
 
 	body := `{"title":"Test"}`
@@ -748,7 +757,7 @@ func TestServer_PatchStripsProtectedFields(t *testing.T) {
 
 func TestServer_TicketStats(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
-	token := GenerateToken("alice", "secret")
+	token := mustToken(t, "alice", "secret")
 	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
 
 	for _, title := range []string{"Task 1", "Task 2"} {
@@ -798,7 +807,7 @@ func TestServer_SkillEndpoint(t *testing.T) {
 
 func TestServer_PatchOnlyProtectedFields_Returns400(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
-	token := GenerateToken("alice", "secret")
+	token := mustToken(t, "alice", "secret")
 	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
 
 	body := `{"title":"Test"}`
@@ -824,7 +833,7 @@ func TestServer_PatchOnlyProtectedFields_Returns400(t *testing.T) {
 
 func TestServer_StatusTransition_DoesNotCorruptCloseFields(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
-	token := GenerateToken("alice", "secret")
+	token := mustToken(t, "alice", "secret")
 	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
 
 	// Create a ticket
@@ -860,8 +869,8 @@ func TestServer_StatusTransition_DoesNotCorruptCloseFields(t *testing.T) {
 
 func TestServer_ListMine(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice", "bob"})
-	tokenAlice := GenerateToken("alice", "secret")
-	tokenBob := GenerateToken("bob", "secret")
+	tokenAlice := mustToken(t, "alice", "secret")
+	tokenBob := mustToken(t, "bob", "secret")
 
 	// alice creates workspace+board
 	wsID, bdID := setupWorkspaceAndBoard(t, srv, tokenAlice)

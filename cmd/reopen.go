@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"raptor/client"
 
 	"github.com/spf13/cobra"
 )
@@ -15,7 +14,7 @@ var reopenCmd = &cobra.Command{
 		if err := requireBoard(); err != nil {
 			return err
 		}
-		c := client.NewScoped(serverURL, authToken, activeWS, activeBoard)
+		c := newClient()
 		ticket, err := c.UpdateTicket(args[0], map[string]any{
 			"status":       "todo",
 			"close_reason": "",

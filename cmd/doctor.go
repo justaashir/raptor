@@ -1,76 +1,55 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"time"
 
 	"github.com/spf13/cobra"
 )
+
+type healthCheck struct {
+	Check  string `json:"check"`
+	Status string `json:"status"`
+	Detail string `json:"detail"`
+}
 
 var doctorCmd = &cobra.Command{
 	Use:   "doctor",
 	Short: "Check connectivity and configuration",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		checks := []map[string]string{}
+		var checks []healthCheck
 		allOK := true
 
 		// Check server connectivity
-		client := &http.Client{Timeout: 5 * time.Second}
-		resp, err := client.Get(serverURL + "/api/version")
-		if err != nil {
-			checks = append(checks, map[string]string{
-				"check": "server", "status": "FAIL", "detail": err.Error(),
-			})
-			allOK = false
-		} else {
-			var info struct{ Version string `json:"version"` }
-			json.NewDecoder(resp.Body).Decode(&info)
-			resp.Body.Close()
-			detail := "reachable"
-			if info.Version != "" {
-				detail = fmt.Sprintf("reachable (v%s)", info.Version)
-				if info.Version != Version && Version != "dev" {
-					detail += " — client version mismatch"
-				}
+		if v := fetchServerVersion(); v != "" {
+			detail := fmt.Sprintf("reachable (v%s)", v)
+			if v != Version && Version != "dev" {
+				detail += " — client version mismatch"
 			}
-			checks = append(checks, map[string]string{
-				"check": "server", "status": "OK", "detail": detail,
-			})
+			checks = append(checks, healthCheck{"server", "OK", detail})
+		} else {
+			checks = append(checks, healthCheck{"server", "FAIL", "unreachable"})
+			allOK = false
 		}
 
 		// Check auth
 		if authToken != "" {
-			checks = append(checks, map[string]string{
-				"check": "auth", "status": "OK", "detail": fmt.Sprintf("logged in as %s", cfgUsername),
-			})
+			checks = append(checks, healthCheck{"auth", "OK", fmt.Sprintf("logged in as %s", cfgUsername)})
 		} else {
-			checks = append(checks, map[string]string{
-				"check": "auth", "status": "WARN", "detail": "not logged in",
-			})
+			checks = append(checks, healthCheck{"auth", "WARN", "not logged in"})
 		}
 
 		// Check workspace
 		if activeWS != "" {
-			checks = append(checks, map[string]string{
-				"check": "workspace", "status": "OK", "detail": activeWS,
-			})
+			checks = append(checks, healthCheck{"workspace", "OK", activeWS})
 		} else {
-			checks = append(checks, map[string]string{
-				"check": "workspace", "status": "WARN", "detail": "no workspace selected",
-			})
+			checks = append(checks, healthCheck{"workspace", "WARN", "no workspace selected"})
 		}
 
 		// Check board
 		if activeBoard != "" {
-			checks = append(checks, map[string]string{
-				"check": "board", "status": "OK", "detail": activeBoard,
-			})
+			checks = append(checks, healthCheck{"board", "OK", activeBoard})
 		} else {
-			checks = append(checks, map[string]string{
-				"check": "board", "status": "WARN", "detail": "no board selected",
-			})
+			checks = append(checks, healthCheck{"board", "WARN", "no board selected"})
 		}
 
 		if jsonOutput {
@@ -80,12 +59,12 @@ var doctorCmd = &cobra.Command{
 
 		for _, c := range checks {
 			icon := "✓"
-			if c["status"] == "FAIL" {
+			if c.Status == "FAIL" {
 				icon = "✗"
-			} else if c["status"] == "WARN" {
+			} else if c.Status == "WARN" {
 				icon = "!"
 			}
-			fmt.Printf("%s %s: %s\n", icon, c["check"], c["detail"])
+			fmt.Printf("%s %s: %s\n", icon, c.Check, c.Detail)
 		}
 		if !allOK {
 			return fmt.Errorf("some checks failed")

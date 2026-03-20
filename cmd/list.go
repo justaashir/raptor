@@ -67,7 +67,7 @@ var listCmd = &cobra.Command{
 		if err := requireBoard(); err != nil {
 			return err
 		}
-		c := client.NewScoped(serverURL, authToken, activeWS, activeBoard)
+		c := newClient()
 		tickets, err := c.ListTickets(client.ListOptions{Status: listStatus, Mine: listMine, All: listAll})
 		if err != nil {
 			return err
