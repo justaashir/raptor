@@ -7,13 +7,19 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 SERVER="${RAPTOR_SERVER:-https://raptor.raptorthree.com}"
 
 CURRENT=$(cat "$ROOT_DIR/VERSION" | tr -d '[:space:]')
+CUR_MAJOR=$(echo "$CURRENT" | cut -d. -f1)
+CUR_MINOR=$(echo "$CURRENT" | cut -d. -f2)
+CUR_PATCH=$(echo "$CURRENT" | cut -d. -f3)
 
 # Prompt for bump type if not passed as argument
 if [ -n "$1" ]; then
     BUMP="$1"
 else
-    printf "Current version: %s\n" "$CURRENT"
-    printf "Bump type — [p]atch / [m]inor / [M]ajor? "
+    printf "Current version: %s\n\n" "$CURRENT"
+    printf "  [p]atch → %d.%d.%d\n" "$CUR_MAJOR" "$CUR_MINOR" "$((CUR_PATCH + 1))"
+    printf "  [m]inor → %d.%d.0\n" "$CUR_MAJOR" "$((CUR_MINOR + 1))"
+    printf "  [M]ajor → %d.0.0\n\n" "$((CUR_MAJOR + 1))"
+    printf "Bump type? "
     read -r choice
     case "$choice" in
         p|patch) BUMP="patch" ;;
@@ -21,9 +27,9 @@ else
         *) BUMP="minor" ;;
     esac
 fi
-MAJOR=$(echo "$CURRENT" | cut -d. -f1)
-MINOR=$(echo "$CURRENT" | cut -d. -f2)
-PATCH=$(echo "$CURRENT" | cut -d. -f3)
+MAJOR=$CUR_MAJOR
+MINOR=$CUR_MINOR
+PATCH=$CUR_PATCH
 
 case "$BUMP" in
     major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
