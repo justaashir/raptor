@@ -270,7 +270,7 @@ func (s *Server) handleWorkspaceMembers(w http.ResponseWriter, r *http.Request, 
 				http.Error(w, `{"error":"user is already a member of this workspace"}`, http.StatusConflict)
 				return
 			}
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

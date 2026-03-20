@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"raptor/model"
+	"strings"
 	"time"
 
 	"github.com/glebarez/sqlite"
@@ -71,16 +72,17 @@ func (db *DB) CreateWorkspace(id, name, createdBy string) error {
 }
 
 func (db *DB) AddWorkspaceMember(workspaceID, username, role string) error {
-	var count int64
-	db.conn.Model(&model.WorkspaceMember{}).
-		Where("workspace_id = ? AND username = ?", workspaceID, username).
-		Count(&count)
-	if count > 0 {
-		return ErrAlreadyMember
-	}
-	return db.conn.Create(&model.WorkspaceMember{
+	err := db.conn.Create(&model.WorkspaceMember{
 		WorkspaceID: workspaceID, Username: username, Role: role,
 	}).Error
+	if err != nil && isDuplicateKeyError(err) {
+		return ErrAlreadyMember
+	}
+	return err
+}
+
+func isDuplicateKeyError(err error) bool {
+	return strings.Contains(err.Error(), "UNIQUE constraint failed")
 }
 
 func (db *DB) ListWorkspaceMembers(workspaceID string) ([]model.WorkspaceMember, error) {
