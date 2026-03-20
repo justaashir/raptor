@@ -43,6 +43,30 @@ func (db *DB) CreateTicket(t model.Ticket) error {
 	return err
 }
 
+func (db *DB) ListTickets(status string) ([]model.Ticket, error) {
+	query := `SELECT id, title, content, status, created_at, updated_at FROM tickets`
+	var args []any
+	if status != "" {
+		query += ` WHERE status = ?`
+		args = append(args, status)
+	}
+	query += ` ORDER BY created_at DESC`
+	rows, err := db.conn.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var tickets []model.Ticket
+	for rows.Next() {
+		var t model.Ticket
+		if err := rows.Scan(&t.ID, &t.Title, &t.Content, &t.Status, &t.CreatedAt, &t.UpdatedAt); err != nil {
+			return nil, err
+		}
+		tickets = append(tickets, t)
+	}
+	return tickets, rows.Err()
+}
+
 func (db *DB) GetTicket(id string) (model.Ticket, error) {
 	var t model.Ticket
 	err := db.conn.QueryRow(
