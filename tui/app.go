@@ -7,6 +7,7 @@ import (
 	"raptor/client"
 	"raptor/model"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
@@ -128,7 +129,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.SetTickets([]model.Ticket(msg))
 
 	case wsMsg:
-		return a, a.fetchTickets
+		return a, tea.Batch(a.fetchTickets, a.listenWS)
 
 	case boardsMsg:
 		a.boardChoices = msg.boards
@@ -339,7 +340,8 @@ func (a *App) fetchBoards() tea.Msg {
 }
 
 func (a *App) listenWS() tea.Msg {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	wsURL := strings.Replace(a.serverURL, "http", "ws", 1) + "/ws"
 	c, _, err := websocket.Dial(ctx, wsURL, nil)
 	if err != nil {
@@ -347,8 +349,10 @@ func (a *App) listenWS() tea.Msg {
 	}
 	defer c.Close(websocket.StatusNormalClosure, "")
 
+	// Read with a long-lived context (not the dial timeout)
+	readCtx := context.Background()
 	for {
-		_, data, err := c.Read(ctx)
+		_, data, err := c.Read(readCtx)
 		if err != nil {
 			return errMsg(err)
 		}

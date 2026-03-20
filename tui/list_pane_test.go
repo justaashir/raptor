@@ -99,36 +99,10 @@ func TestListPane_SelectionPreservedAfterRefresh(t *testing.T) {
 	}
 }
 
-func TestListPane_BuildRow_FormatsCorrectly(t *testing.T) {
-	lp := NewListPane(80, 20)
-	ticket := testTickets()[0] // TODO, a1b2c3d4, tom, 2d ago
-	row := lp.BuildRow(ticket)
-
-	if row[0] != "TODO" {
-		t.Fatalf("row[0] (status) = %q, want %q", row[0], "TODO")
-	}
-	if row[1] != "a1b2c3d4" {
-		t.Fatalf("row[1] (id) = %q, want %q", row[1], "a1b2c3d4")
-	}
-	if row[2] != "@tom" {
-		t.Fatalf("row[2] (assignee) = %q, want %q", row[2], "@tom")
-	}
-	// row[3] is age — just check it's not empty
-	if row[3] == "" {
-		t.Fatal("row[3] (age) is empty")
-	}
-	if row[4] != "Fix login bug" {
-		t.Fatalf("row[4] (title) = %q, want %q", row[4], "Fix login bug")
-	}
-}
-
-func TestListPane_BuildRow_NoAssignee(t *testing.T) {
-	lp := NewListPane(80, 20)
-	ticket := testTickets()[2] // no assignee
-	row := lp.BuildRow(ticket)
-
-	if row[2] != "--" {
-		t.Fatalf("row[2] (no assignee) = %q, want %q", row[2], "--")
+func TestFormatStatus_CustomStatus(t *testing.T) {
+	got := FormatStatus(model.Status("review"))
+	if got != "review" {
+		t.Fatalf("FormatStatus(review) = %q, want %q", got, "review")
 	}
 }
 

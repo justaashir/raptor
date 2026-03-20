@@ -11,8 +11,8 @@ func TestNewTicket_HasIDTitleAndStatus(t *testing.T) {
 	if ticket.ID == "" {
 		t.Fatal("expected ticket to have an ID")
 	}
-	if len(ticket.ID) != 8 {
-		t.Fatalf("expected 8-char ID, got %d: %q", len(ticket.ID), ticket.ID)
+	if len(ticket.ID) != 12 {
+		t.Fatalf("expected 12-char ID, got %d: %q", len(ticket.ID), ticket.ID)
 	}
 	if ticket.Title != "My first task" {
 		t.Fatalf("expected title %q, got %q", "My first task", ticket.Title)
@@ -31,22 +31,18 @@ func TestNewTicket_HasIDTitleAndStatus(t *testing.T) {
 	}
 }
 
-func TestValidStatus_AcceptsTodoInProgressDone(t *testing.T) {
-	for _, s := range []Status{Todo, InProgress, Done} {
-		if !ValidStatus(s) {
-			t.Fatalf("expected %q to be valid", s)
+func TestBoard_ValidStatus_AcceptsConfiguredStatuses(t *testing.T) {
+	b := Board{Statuses: "backlog,dev,done"}
+	for _, s := range []string{"backlog", "dev", "done"} {
+		if !b.ValidStatus(s) {
+			t.Fatalf("expected %q to be valid for board", s)
 		}
 	}
 }
 
-func TestValidStatus_RejectsGarbage(t *testing.T) {
-	if ValidStatus("banana") {
+func TestBoard_ValidStatus_RejectsInvalidStatus(t *testing.T) {
+	b := Board{Statuses: "backlog,dev,done"}
+	if b.ValidStatus("banana") {
 		t.Fatal("expected 'banana' to be invalid")
-	}
-}
-
-func TestValidStatus_RejectsClosed(t *testing.T) {
-	if ValidStatus("closed") {
-		t.Fatal("expected 'closed' to be invalid — closed status removed")
 	}
 }

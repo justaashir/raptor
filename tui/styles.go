@@ -17,11 +17,13 @@ var (
 	colorOrange    = lipgloss.Color("#ffb86c")
 	colorPink      = lipgloss.Color("#ff79c6")
 	colorPurple    = lipgloss.Color("#bd93f9")
-	colorRed       = lipgloss.Color("#ff5555")
-	colorYellow    = lipgloss.Color("#f1fa8c")
-	colorBrightPurple = lipgloss.Color("#d6acff")
-	colorGold      = lipgloss.Color("#ffd700")
+	colorYellow = lipgloss.Color("#f1fa8c")
 )
+
+// statusPalette cycles through colors for dynamic statuses beyond the known ones.
+var statusPalette = []lipgloss.Color{
+	colorOrange, colorCyan, colorGreen, colorPink, colorPurple, colorYellow,
+}
 
 // StatusColor returns a color for each status.
 func StatusColor(s model.Status) lipgloss.Color {
@@ -33,7 +35,12 @@ func StatusColor(s model.Status) lipgloss.Color {
 	case model.Done:
 		return colorGreen
 	default:
-		return colorComment
+		// Cycle through palette based on status name hash
+		h := 0
+		for _, c := range string(s) {
+			h += int(c)
+		}
+		return statusPalette[h%len(statusPalette)]
 	}
 }
 
@@ -54,10 +61,10 @@ func StatusIcon(s model.Status) string {
 // StatusStar returns a star emoji for open tickets.
 func StatusStar(s model.Status) string {
 	switch s {
-	case model.Todo, model.InProgress:
-		return "⭐"
-	default:
+	case model.Done:
 		return "  "
+	default:
+		return "⭐"
 	}
 }
 
@@ -78,11 +85,6 @@ var (
 				Bold(true).
 				Padding(0, 1)
 
-	StatusBarStyle = lipgloss.NewStyle().
-			Background(colorLine).
-			Foreground(colorFg).
-			Padding(0, 1)
-
 	DetailTitleStyle = lipgloss.NewStyle().
 				Bold(true).
 				Foreground(colorPink)
@@ -91,6 +93,4 @@ var (
 				Foreground(colorPurple).
 				Bold(true)
 
-	DetailMetaValueStyle = lipgloss.NewStyle().
-				Foreground(colorFg)
 )

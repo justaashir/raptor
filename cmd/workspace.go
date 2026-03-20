@@ -90,8 +90,8 @@ var wsMembersCmd = &cobra.Command{
 	Use:   "members",
 	Short: "List workspace members",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if activeWS == "" {
-			return fmt.Errorf("no workspace selected. Run 'raptor workspace use' first")
+		if err := requireWorkspace(); err != nil {
+			return err
 		}
 		c := newUnscopedClient()
 		members, err := c.ListWorkspaceMembers(activeWS)
@@ -114,8 +114,8 @@ var wsInviteCmd = &cobra.Command{
 	Short: "Invite a user to the workspace",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if activeWS == "" {
-			return fmt.Errorf("no workspace selected. Run 'raptor workspace use' first")
+		if err := requireWorkspace(); err != nil {
+			return err
 		}
 		c := newUnscopedClient()
 		if err := c.InviteWorkspaceMember(activeWS, args[0]); err != nil {
@@ -131,8 +131,8 @@ var wsKickCmd = &cobra.Command{
 	Short: "Remove a user from the workspace",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if activeWS == "" {
-			return fmt.Errorf("no workspace selected. Run 'raptor workspace use' first")
+		if err := requireWorkspace(); err != nil {
+			return err
 		}
 		c := newUnscopedClient()
 		if err := c.KickWorkspaceMember(activeWS, args[0]); err != nil {

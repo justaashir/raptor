@@ -113,15 +113,16 @@ func (s *Server) authorize(c echo.Context, workspaceID, minRole string) error {
 		return errors.New("not a workspace member")
 	}
 
-	roleLevel := map[string]int{"owner": 2, "member": 1}
-	if roleLevel[role] < roleLevel[minRole] {
+	if roleLevels[role] < roleLevels[minRole] {
 		return errors.New("insufficient permissions")
 	}
 	return nil
 }
 
+var roleLevels = map[string]int{"owner": 2, "member": 1}
+
 func genID() string {
-	return uuid.New().String()[:8]
+	return uuid.New().String()[:12]
 }
 
 // --- WebSocket (stays raw, Echo doesn't wrap WS well) ---
@@ -274,6 +275,9 @@ func (s *Server) getBoard(c echo.Context) error {
 	if err != nil {
 		return jsonErr(c, http.StatusNotFound, "board not found")
 	}
+	if board.WorkspaceID != wid {
+		return jsonErr(c, http.StatusNotFound, "board not found")
+	}
 	return c.JSON(http.StatusOK, board)
 }
 
@@ -295,6 +299,11 @@ func (s *Server) createBoard(c echo.Context) error {
 	if len(input.Statuses) == 0 {
 		input.Statuses = model.DefaultStatuses
 	}
+	for _, st := range input.Statuses {
+		if st == "" || strings.ContainsAny(st, ", ") {
+			return jsonErr(c, http.StatusBadRequest, "invalid status name: must be non-empty with no commas or spaces")
+		}
+	}
 	id := genID()
 	u := username(c)
 	if err := s.db.CreateBoard(id, wid, input.Name, u, input.Statuses); err != nil {
@@ -311,6 +320,13 @@ func (s *Server) updateBoard(c echo.Context) error {
 	bid := c.Param("bid")
 	if err := s.authorize(c, wid, "owner"); err != nil {
 		return jsonErr(c, http.StatusForbidden, err.Error())
+	}
+	board, err := s.db.GetBoard(bid)
+	if err != nil {
+		return jsonErr(c, http.StatusNotFound, "board not found")
+	}
+	if board.WorkspaceID != wid {
+		return jsonErr(c, http.StatusNotFound, "board not found")
 	}
 	var input struct {
 		Name     *string  `json:"name"`
@@ -332,11 +348,11 @@ func (s *Server) updateBoard(c echo.Context) error {
 	if err := s.db.UpdateBoard(bid, fields); err != nil {
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
-	board, err := s.db.GetBoard(bid)
+	updated, err := s.db.GetBoard(bid)
 	if err != nil {
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
-	return c.JSON(http.StatusOK, board)
+	return c.JSON(http.StatusOK, updated)
 }
 
 func (s *Server) deleteBoard(c echo.Context) error {
@@ -344,6 +360,13 @@ func (s *Server) deleteBoard(c echo.Context) error {
 	bid := c.Param("bid")
 	if err := s.authorize(c, wid, "owner"); err != nil {
 		return jsonErr(c, http.StatusForbidden, err.Error())
+	}
+	board, err := s.db.GetBoard(bid)
+	if err != nil {
+		return jsonErr(c, http.StatusNotFound, "board not found")
+	}
+	if board.WorkspaceID != wid {
+		return jsonErr(c, http.StatusNotFound, "board not found")
 	}
 	if err := s.db.DeleteBoard(bid); err != nil {
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")
@@ -444,6 +467,7 @@ func (s *Server) createTicket(c echo.Context) error {
 
 func (s *Server) getTicket(c echo.Context) error {
 	wid := c.Param("wid")
+	bid := c.Param("bid")
 	tid := c.Param("tid")
 	if err := s.authorize(c, wid, "member"); err != nil {
 		return jsonErr(c, http.StatusForbidden, err.Error())
@@ -454,6 +478,9 @@ func (s *Server) getTicket(c echo.Context) error {
 	}
 	if err != nil {
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")
+	}
+	if ticket.BoardID != bid {
+		return c.String(http.StatusNotFound, "not found")
 	}
 	return c.JSON(http.StatusOK, ticket)
 }
@@ -503,9 +530,17 @@ func (s *Server) updateTicket(c echo.Context) error {
 
 func (s *Server) deleteTicket(c echo.Context) error {
 	wid := c.Param("wid")
+	bid := c.Param("bid")
 	tid := c.Param("tid")
 	if err := s.authorize(c, wid, "member"); err != nil {
 		return jsonErr(c, http.StatusForbidden, err.Error())
+	}
+	ticket, err := s.db.GetTicket(tid)
+	if err != nil {
+		return jsonErr(c, http.StatusNotFound, "not found")
+	}
+	if ticket.BoardID != bid {
+		return jsonErr(c, http.StatusNotFound, "not found")
 	}
 	if err := s.db.DeleteTicket(tid); err != nil {
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")

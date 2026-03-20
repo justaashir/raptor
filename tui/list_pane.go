@@ -98,23 +98,25 @@ func (d ticketDelegate) Render(w io.Writer, m list.Model, index int, listItem li
 	fmt.Fprint(w, lipgloss.NewStyle().MaxWidth(d.width).Render(raw))
 }
 
-// padRight pads s with spaces to width.
+// padRight pads s with spaces to width using display width.
 func padRight(s string, width int) string {
-	if len(s) >= width {
+	w := lipgloss.Width(s)
+	if w >= width {
 		return s[:width]
 	}
-	return s + strings.Repeat(" ", width-len(s))
+	return s + strings.Repeat(" ", width-w)
 }
 
-// truncate cuts a string to maxLen, adding "..." if it was longer.
+// truncate cuts a string to maxLen runes, adding "..." if it was longer.
 func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
+	runes := []rune(s)
+	if len(runes) <= maxLen {
 		return s
 	}
 	if maxLen <= 3 {
-		return s[:maxLen]
+		return string(runes[:maxLen])
 	}
-	return s[:maxLen-3] + "..."
+	return string(runes[:maxLen-3]) + "..."
 }
 
 // ListPane wraps a bubbles/list for displaying tickets.
@@ -172,21 +174,6 @@ func (lp *ListPane) SetTickets(tickets []model.Ticket) {
 				return
 			}
 		}
-	}
-}
-
-// BuildRow converts a ticket into a string slice (for test compatibility).
-func (lp *ListPane) BuildRow(t model.Ticket) []string {
-	assignee := "--"
-	if t.Assignee != "" {
-		assignee = "@" + t.Assignee
-	}
-	return []string{
-		FormatStatus(t.Status),
-		t.ID,
-		assignee,
-		FormatAge(t.CreatedAt),
-		t.Title,
 	}
 }
 

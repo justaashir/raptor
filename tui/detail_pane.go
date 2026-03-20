@@ -138,11 +138,13 @@ func (dp *DetailPane) View() string {
 	return dp.viewport.View()
 }
 
-// SetSize updates the pane dimensions and recreates the glamour renderer.
+// SetSize updates the pane dimensions and recreates the glamour renderer only on width change.
 func (dp *DetailPane) SetSize(width, height int) {
+	if dp.width != width {
+		dp.renderer = newGlamourRenderer(width)
+	}
 	dp.width = width
 	dp.height = height
 	dp.viewport.Width = width
 	dp.viewport.Height = height
-	dp.renderer = newGlamourRenderer(width)
 }
