@@ -21,6 +21,10 @@ var searchCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		if jsonOutput {
+			printJSON(tickets)
+			return nil
+		}
 		if len(tickets) == 0 {
 			fmt.Println("No tickets found.")
 			return nil

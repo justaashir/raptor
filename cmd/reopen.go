@@ -23,7 +23,11 @@ var reopenCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Reopened %s\n", ticket.ID)
+		if jsonOutput {
+			printJSON(ticket)
+		} else {
+			fmt.Printf("Reopened %s\n", ticket.ID)
+		}
 		return nil
 	},
 }

@@ -21,7 +21,11 @@ var moveCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Moved %s to %s\n", ticket.ID, ticket.Status)
+		if jsonOutput {
+			printJSON(ticket)
+		} else {
+			fmt.Printf("Moved %s to %s\n", ticket.ID, ticket.Status)
+		}
 		return nil
 	},
 }

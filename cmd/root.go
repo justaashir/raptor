@@ -24,6 +24,7 @@ var (
 	activeWS      string
 	activeBoard   string
 	cfgUsername   string
+	jsonOutput    bool
 )
 
 var rootCmd = &cobra.Command{
@@ -84,6 +85,7 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&serverURL, "server", DefaultServer, "server URL")
 	rootCmd.PersistentFlags().StringVar(&activeWS, "workspace", "", "workspace ID")
 	rootCmd.PersistentFlags().StringVar(&activeBoard, "board", "", "board ID")
+	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "output as JSON")
 }
 
 // requireBoard returns an error if workspace or board is not set.

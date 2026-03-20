@@ -27,7 +27,11 @@ var bdCreateCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Created board %s: %s\n", bd.ID, bd.Name)
+		if jsonOutput {
+			printJSON(bd)
+		} else {
+			fmt.Printf("Created board %s: %s\n", bd.ID, bd.Name)
+		}
 		return nil
 	},
 }
@@ -43,6 +47,10 @@ var bdListCmd = &cobra.Command{
 		boards, err := c.ListBoards(activeWS)
 		if err != nil {
 			return err
+		}
+		if jsonOutput {
+			printJSON(boards)
+			return nil
 		}
 		if len(boards) == 0 {
 			fmt.Println("No boards found.")
@@ -99,6 +107,10 @@ var bdMembersCmd = &cobra.Command{
 		members, err := c.ListBoardMembers(activeWS, activeBoard)
 		if err != nil {
 			return err
+		}
+		if jsonOutput {
+			printJSON(members)
+			return nil
 		}
 		if len(members) == 0 {
 			fmt.Println("No explicit board members. Owners and admins have implicit access.")

@@ -21,6 +21,10 @@ var showCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		if jsonOutput {
+			printJSON(ticket)
+			return nil
+		}
 		fmt.Printf("ID:       %s\n", ticket.ID)
 		fmt.Printf("Title:    %s\n", ticket.Title)
 		fmt.Printf("Status:   %s\n", ticket.Status)

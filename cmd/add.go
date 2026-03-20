@@ -25,7 +25,11 @@ var addCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Created ticket %s: %s\n", ticket.ID, ticket.Title)
+		if jsonOutput {
+			printJSON(ticket)
+		} else {
+			fmt.Printf("Created ticket %s: %s\n", ticket.ID, ticket.Title)
+		}
 		return nil
 	},
 }

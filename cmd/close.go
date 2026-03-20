@@ -29,7 +29,11 @@ var closeCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Closed %s\n", ticket.ID)
+		if jsonOutput {
+			printJSON(ticket)
+		} else {
+			fmt.Printf("Closed %s\n", ticket.ID)
+		}
 		return nil
 	},
 }
