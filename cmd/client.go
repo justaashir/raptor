@@ -10,13 +10,19 @@ import (
 )
 
 type Client struct {
-	baseURL string
-	token   string
-	http    *http.Client
+	baseURL   string
+	token     string
+	workspace string
+	board     string
+	http      *http.Client
 }
 
 func NewClient(baseURL, token string) *Client {
 	return &Client{baseURL: baseURL, token: token, http: &http.Client{}}
+}
+
+func NewScopedClient(baseURL, token, workspace, board string) *Client {
+	return &Client{baseURL: baseURL, token: token, workspace: workspace, board: board, http: &http.Client{}}
 }
 
 func (c *Client) do(req *http.Request) (*http.Response, error) {
@@ -34,13 +40,22 @@ func (c *Client) do(req *http.Request) (*http.Response, error) {
 	return resp, nil
 }
 
+// ticketsURL returns the board-scoped ticket URL if workspace/board are set,
+// otherwise falls back to the old /api/tickets endpoint.
+func (c *Client) ticketsURL() string {
+	if c.workspace != "" && c.board != "" {
+		return fmt.Sprintf("%s/api/workspaces/%s/boards/%s/tickets", c.baseURL, c.workspace, c.board)
+	}
+	return c.baseURL + "/api/tickets"
+}
+
 func (c *Client) CreateTicket(title, content, assignee string) (model.Ticket, error) {
 	payload := map[string]string{"title": title, "content": content}
 	if assignee != "" {
 		payload["assignee"] = assignee
 	}
 	body, _ := json.Marshal(payload)
-	req, _ := http.NewRequest("POST", c.baseURL+"/api/tickets", bytes.NewReader(body))
+	req, _ := http.NewRequest("POST", c.ticketsURL(), bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.do(req)
 	if err != nil {
@@ -57,7 +72,7 @@ func (c *Client) CreateTicket(title, content, assignee string) (model.Ticket, er
 }
 
 func (c *Client) ListTickets(status string, mine bool) ([]model.Ticket, error) {
-	url := c.baseURL + "/api/tickets"
+	url := c.ticketsURL()
 	sep := "?"
 	if status != "" {
 		url += sep + "status=" + status
@@ -78,7 +93,7 @@ func (c *Client) ListTickets(status string, mine bool) ([]model.Ticket, error) {
 }
 
 func (c *Client) GetTicket(id string) (model.Ticket, error) {
-	req, _ := http.NewRequest("GET", c.baseURL+"/api/tickets/"+id, nil)
+	req, _ := http.NewRequest("GET", c.ticketsURL()+"/"+id, nil)
 	resp, err := c.do(req)
 	if err != nil {
 		return model.Ticket{}, err
@@ -94,7 +109,7 @@ func (c *Client) GetTicket(id string) (model.Ticket, error) {
 
 func (c *Client) UpdateTicket(id string, fields map[string]any) (model.Ticket, error) {
 	body, _ := json.Marshal(fields)
-	req, _ := http.NewRequest("PATCH", c.baseURL+"/api/tickets/"+id, bytes.NewReader(body))
+	req, _ := http.NewRequest("PATCH", c.ticketsURL()+"/"+id, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.do(req)
 	if err != nil {
@@ -107,7 +122,195 @@ func (c *Client) UpdateTicket(id string, fields map[string]any) (model.Ticket, e
 }
 
 func (c *Client) DeleteTicket(id string) error {
-	req, _ := http.NewRequest("DELETE", c.baseURL+"/api/tickets/"+id, nil)
+	req, _ := http.NewRequest("DELETE", c.ticketsURL()+"/"+id, nil)
+	resp, err := c.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+	return nil
+}
+
+// Workspace methods
+
+func (c *Client) CreateWorkspace(name string) (model.Workspace, error) {
+	body, _ := json.Marshal(map[string]string{"name": name})
+	req, _ := http.NewRequest("POST", c.baseURL+"/api/workspaces/", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.do(req)
+	if err != nil {
+		return model.Workspace{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		msg, _ := io.ReadAll(resp.Body)
+		return model.Workspace{}, fmt.Errorf("unexpected status: %d: %s", resp.StatusCode, msg)
+	}
+	var ws model.Workspace
+	json.NewDecoder(resp.Body).Decode(&ws)
+	return ws, nil
+}
+
+func (c *Client) ListWorkspaces() ([]model.Workspace, error) {
+	req, _ := http.NewRequest("GET", c.baseURL+"/api/workspaces/", nil)
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var workspaces []model.Workspace
+	json.NewDecoder(resp.Body).Decode(&workspaces)
+	return workspaces, nil
+}
+
+func (c *Client) DeleteWorkspace(id string) error {
+	req, _ := http.NewRequest("DELETE", c.baseURL+"/api/workspaces/"+id, nil)
+	resp, err := c.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func (c *Client) ListWorkspaceMembers(wid string) ([]model.WorkspaceMember, error) {
+	req, _ := http.NewRequest("GET", c.baseURL+"/api/workspaces/"+wid+"/members", nil)
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var members []model.WorkspaceMember
+	json.NewDecoder(resp.Body).Decode(&members)
+	return members, nil
+}
+
+func (c *Client) InviteWorkspaceMember(wid, username, role string) error {
+	body, _ := json.Marshal(map[string]string{"username": username, "role": role})
+	req, _ := http.NewRequest("POST", c.baseURL+"/api/workspaces/"+wid+"/members", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		msg, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("unexpected status: %d: %s", resp.StatusCode, msg)
+	}
+	return nil
+}
+
+func (c *Client) KickWorkspaceMember(wid, username string) error {
+	req, _ := http.NewRequest("DELETE", c.baseURL+"/api/workspaces/"+wid+"/members/"+username, nil)
+	resp, err := c.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func (c *Client) ChangeRole(wid, username, role string) error {
+	body, _ := json.Marshal(map[string]string{"role": role})
+	req, _ := http.NewRequest("PATCH", c.baseURL+"/api/workspaces/"+wid+"/members/"+username, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		msg, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("unexpected status: %d: %s", resp.StatusCode, msg)
+	}
+	return nil
+}
+
+// Board methods
+
+func (c *Client) CreateBoard(wid, name string) (model.Board, error) {
+	body, _ := json.Marshal(map[string]string{"name": name})
+	req, _ := http.NewRequest("POST", c.baseURL+"/api/workspaces/"+wid+"/boards", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.do(req)
+	if err != nil {
+		return model.Board{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		msg, _ := io.ReadAll(resp.Body)
+		return model.Board{}, fmt.Errorf("unexpected status: %d: %s", resp.StatusCode, msg)
+	}
+	var bd model.Board
+	json.NewDecoder(resp.Body).Decode(&bd)
+	return bd, nil
+}
+
+func (c *Client) ListBoards(wid string) ([]model.Board, error) {
+	req, _ := http.NewRequest("GET", c.baseURL+"/api/workspaces/"+wid+"/boards", nil)
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var boards []model.Board
+	json.NewDecoder(resp.Body).Decode(&boards)
+	return boards, nil
+}
+
+func (c *Client) DeleteBoard(wid, bid string) error {
+	req, _ := http.NewRequest("DELETE", c.baseURL+"/api/workspaces/"+wid+"/boards/"+bid, nil)
+	resp, err := c.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("unexpected status: %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func (c *Client) ListBoardMembers(wid, bid string) ([]model.BoardMember, error) {
+	req, _ := http.NewRequest("GET", c.baseURL+"/api/workspaces/"+wid+"/boards/"+bid+"/members", nil)
+	resp, err := c.do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var members []model.BoardMember
+	json.NewDecoder(resp.Body).Decode(&members)
+	return members, nil
+}
+
+func (c *Client) GrantBoardAccess(wid, bid, username string) error {
+	body, _ := json.Marshal(map[string]string{"username": username})
+	req, _ := http.NewRequest("POST", c.baseURL+"/api/workspaces/"+wid+"/boards/"+bid+"/members", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		msg, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("unexpected status: %d: %s", resp.StatusCode, msg)
+	}
+	return nil
+}
+
+func (c *Client) RevokeBoardAccess(wid, bid, username string) error {
+	req, _ := http.NewRequest("DELETE", c.baseURL+"/api/workspaces/"+wid+"/boards/"+bid+"/members/"+username, nil)
 	resp, err := c.do(req)
 	if err != nil {
 		return err

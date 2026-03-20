@@ -12,7 +12,10 @@ var showCmd = &cobra.Command{
 	Short: "Show ticket details",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c := NewClient(serverURL, authToken)
+		if err := requireBoard(); err != nil {
+			return err
+		}
+		c := NewScopedClient(serverURL, authToken, activeWS, activeBoard)
 		ticket, err := c.GetTicket(args[0])
 		if err != nil {
 			return err
@@ -25,6 +28,9 @@ var showCmd = &cobra.Command{
 		}
 		if ticket.Assignee != "" {
 			fmt.Printf("Assignee: %s\n", ticket.Assignee)
+		}
+		if ticket.AssignedBy != "" {
+			fmt.Printf("Assigned by: %s\n", ticket.AssignedBy)
 		}
 		fmt.Printf("Created:  %s\n", ticket.CreatedAt.Format("2006-01-02 15:04"))
 		fmt.Printf("Updated:  %s\n", ticket.UpdatedAt.Format("2006-01-02 15:04"))

@@ -17,6 +17,9 @@ var editCmd = &cobra.Command{
 	Short: "Edit a ticket",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := requireBoard(); err != nil {
+			return err
+		}
 		fields := map[string]any{}
 		if editTitle != "" {
 			fields["title"] = editTitle
@@ -30,7 +33,7 @@ var editCmd = &cobra.Command{
 		if len(fields) == 0 {
 			return fmt.Errorf("specify --title, --content, or --assign to edit")
 		}
-		c := NewClient(serverURL, authToken)
+		c := NewScopedClient(serverURL, authToken, activeWS, activeBoard)
 		ticket, err := c.UpdateTicket(args[0], fields)
 		if err != nil {
 			return err

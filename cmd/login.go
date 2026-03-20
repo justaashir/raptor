@@ -52,6 +52,21 @@ var loginCmd = &cobra.Command{
 			Token:    result.Token,
 			Username: result.Username,
 		}
+
+		// Auto-select workspace/board if user has exactly one of each
+		c := NewClient(serverURL, result.Token)
+		workspaces, err := c.ListWorkspaces()
+		if err == nil && len(workspaces) == 1 {
+			cfg.Workspace = workspaces[0].ID
+			fmt.Printf("Auto-selected workspace: %s\n", workspaces[0].Name)
+
+			boards, err := c.ListBoards(workspaces[0].ID)
+			if err == nil && len(boards) == 1 {
+				cfg.Board = boards[0].ID
+				fmt.Printf("Auto-selected board: %s\n", boards[0].Name)
+			}
+		}
+
 		if err := SaveConfig(cfg); err != nil {
 			return fmt.Errorf("failed to save config: %w", err)
 		}

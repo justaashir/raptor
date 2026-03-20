@@ -28,7 +28,15 @@ var serveCmd = &cobra.Command{
 			}
 		}
 
-		db, err := server.NewDB(dbPath)
+		// Parse seed users from RAPTOR_USERS env var
+		var seedUsers []string
+		if users := os.Getenv("RAPTOR_USERS"); users != "" {
+			for _, u := range strings.Split(users, ",") {
+				seedUsers = append(seedUsers, strings.TrimSpace(u))
+			}
+		}
+
+		db, err := server.NewDB(dbPath, seedUsers...)
 		if err != nil {
 			return fmt.Errorf("failed to open database: %w", err)
 		}
@@ -47,13 +55,9 @@ var serveCmd = &cobra.Command{
 			opts = append(opts, server.WithSecret(secret))
 			fmt.Println("Auth enabled")
 		}
-		if users := os.Getenv("RAPTOR_USERS"); users != "" {
-			list := strings.Split(users, ",")
-			for i := range list {
-				list[i] = strings.TrimSpace(list[i])
-			}
-			opts = append(opts, server.WithAllowedUsers(list))
-			fmt.Printf("Allowed users: %s\n", users)
+		if len(seedUsers) > 0 {
+			opts = append(opts, server.WithAllowedUsers(seedUsers))
+			fmt.Printf("Allowed users: %s\n", strings.Join(seedUsers, ", "))
 		}
 
 		srv := server.NewServer(db, hub, opts...)

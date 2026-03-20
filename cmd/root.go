@@ -19,8 +19,11 @@ var (
 )
 
 var (
-	serverURL string
-	authToken string
+	serverURL     string
+	authToken     string
+	activeWS      string
+	activeBoard   string
+	cfgUsername   string
 )
 
 var rootCmd = &cobra.Command{
@@ -40,9 +43,19 @@ var rootCmd = &cobra.Command{
 			if cfg.Token != "" {
 				authToken = cfg.Token
 			}
+			if cfg.Username != "" {
+				cfgUsername = cfg.Username
+			}
 			// Use config server if user didn't override via flag
 			if cfg.Server != "" && !cmd.Flags().Changed("server") {
 				serverURL = cfg.Server
+			}
+			// Load workspace/board from config unless overridden by flags
+			if cfg.Workspace != "" && !cmd.Flags().Changed("workspace") {
+				activeWS = cfg.Workspace
+			}
+			if cfg.Board != "" && !cmd.Flags().Changed("board") {
+				activeBoard = cfg.Board
 			}
 		}
 
@@ -53,7 +66,7 @@ var rootCmd = &cobra.Command{
 		go checkForUpdate()
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		app := tui.NewApp(serverURL, authToken)
+		app := tui.NewApp(serverURL, authToken, activeWS, activeBoard)
 		p := tea.NewProgram(app, tea.WithAltScreen())
 		_, err := p.Run()
 		return err
@@ -69,6 +82,16 @@ func Execute() {
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&serverURL, "server", DefaultServer, "server URL")
+	rootCmd.PersistentFlags().StringVar(&activeWS, "workspace", "", "workspace ID")
+	rootCmd.PersistentFlags().StringVar(&activeBoard, "board", "", "board ID")
+}
+
+// requireBoard returns an error if workspace or board is not set.
+func requireBoard() error {
+	if activeWS == "" || activeBoard == "" {
+		return fmt.Errorf("no board selected. Run 'raptor workspace use' and 'raptor board use' first")
+	}
+	return nil
 }
 
 func checkForUpdate() {

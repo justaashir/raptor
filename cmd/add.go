@@ -16,7 +16,10 @@ var addCmd = &cobra.Command{
 	Short: "Add a new ticket",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c := NewClient(serverURL, authToken)
+		if err := requireBoard(); err != nil {
+			return err
+		}
+		c := NewScopedClient(serverURL, authToken, activeWS, activeBoard)
 		ticket, err := c.CreateTicket(args[0], addContent, addAssign)
 		if err != nil {
 			return err

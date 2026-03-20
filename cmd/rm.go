@@ -13,11 +13,14 @@ var rmCmd = &cobra.Command{
 	Short: "Delete a ticket",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if err := requireBoard(); err != nil {
+			return err
+		}
 		if !rmForce {
 			fmt.Printf("Delete ticket %s? Use --force to confirm.\n", args[0])
 			return nil
 		}
-		c := NewClient(serverURL, authToken)
+		c := NewScopedClient(serverURL, authToken, activeWS, activeBoard)
 		if err := c.DeleteTicket(args[0]); err != nil {
 			return err
 		}

@@ -22,7 +22,10 @@ var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List tickets",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c := NewClient(serverURL, authToken)
+		if err := requireBoard(); err != nil {
+			return err
+		}
+		c := NewScopedClient(serverURL, authToken, activeWS, activeBoard)
 		tickets, err := c.ListTickets(listStatus, listMine)
 		if err != nil {
 			return err

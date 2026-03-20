@@ -12,7 +12,10 @@ var moveCmd = &cobra.Command{
 	Long:  "Move a ticket. Valid statuses: todo, in_progress, done",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		c := NewClient(serverURL, authToken)
+		if err := requireBoard(); err != nil {
+			return err
+		}
+		c := NewScopedClient(serverURL, authToken, activeWS, activeBoard)
 		ticket, err := c.UpdateTicket(args[0], map[string]any{"status": args[1]})
 		if err != nil {
 			return err
