@@ -9,7 +9,7 @@ import (
 var moveCmd = &cobra.Command{
 	Use:   "move <id> <status>",
 	Short: "Move ticket to a new status",
-	Long:  "Move a ticket. Valid statuses: todo, in_progress, done",
+	Long:  "Move a ticket to a new status. Valid statuses depend on the board's configuration.",
 	Args:  cobra.ExactArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := requireBoard(); err != nil {

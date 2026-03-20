@@ -12,15 +12,24 @@ go test ./...              # Run all tests
 ./raptor add "title"       # Add ticket via CLI
 ./raptor list              # List tickets
 ./raptor show <id>         # Show ticket details
-./raptor move <id> <status> # Move ticket (todo, in_progress, done)
+./raptor move <id> <status> # Move ticket (statuses are board-defined)
 ```
 
 ### Architecture
 
-- `model/` — Ticket struct, Status enum, validation
+- `model/` — Ticket struct, Board with dynamic statuses, Workspace/Member
 - `server/` — HTTP REST API + WebSocket hub + SQLite persistence
-- `tui/` — Bubble Tea TUI with 3-column board, Glamour markdown, Huh forms
+- `tui/` — Bubble Tea TUI with dynamic N-column board, Glamour markdown, Huh forms
 - `cmd/` — Cobra CLI commands + HTTP client
+- `client/` — Resty HTTP client for server communication
+
+### Key Design Decisions
+
+- **Dynamic statuses**: Each board defines its own statuses (e.g. `backlog,active,review,done`). Default: `todo,in_progress,done`
+- **No board-level ACL**: Workspace membership = access to all boards
+- **Two roles only**: `owner` and `member` (no admin tier)
+- **No closed status**: Use board-defined statuses or `rm` to delete
+- **Zero default data**: New users create their own workspace and board after login
 
 ### Dependencies
 
@@ -31,7 +40,7 @@ go test ./...              # Run all tests
 
 - **Server**: Railway at `https://raptor.raptorthree.com`
 - **Volume**: mounted at `/data`, stores `raptor.db` + release binaries
-- **Env vars on Railway**: `DATABASE_PATH=/data/raptor.db`, `VERSION=<current>`, `PORT` (set by Railway)
+- **Env vars on Railway**: `DATABASE_PATH=/data/raptor.db`, `VERSION=<current>`, `PORT` (set by Railway), `RAPTOR_SECRET`, `RAPTOR_USERS`
 - Auto-deploys on push to `main`
 
 ### Releasing

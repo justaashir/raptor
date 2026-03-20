@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/spf13/cobra"
 )
@@ -15,16 +16,13 @@ var statsCmd = &cobra.Command{
 		}
 		c := newClient()
 
-		// Try server-side stats first, fall back to client-side counting
 		result, err := c.TicketStats()
 		if err != nil {
 			return err
 		}
 
 		var total int
-		counts := map[string]int{
-			"todo": 0, "in_progress": 0, "done": 0, "closed": 0,
-		}
+		counts := map[string]int{}
 
 		rawCounts, ok := result["counts"].(map[string]any)
 		if !ok {
@@ -44,11 +42,16 @@ var statsCmd = &cobra.Command{
 			return nil
 		}
 
-		fmt.Printf("Total:       %d\n", total)
-		fmt.Printf("Todo:        %d\n", counts["todo"])
-		fmt.Printf("In Progress: %d\n", counts["in_progress"])
-		fmt.Printf("Done:        %d\n", counts["done"])
-		fmt.Printf("Closed:      %d\n", counts["closed"])
+		fmt.Printf("Total: %d\n", total)
+		// Sort keys for consistent output
+		var keys []string
+		for k := range counts {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			fmt.Printf("  %-15s %d\n", k, counts[k])
+		}
 		return nil
 	},
 }

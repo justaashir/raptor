@@ -21,8 +21,18 @@ var bdCreateCmd = &cobra.Command{
 		if activeWS == "" {
 			return fmt.Errorf("no workspace selected. Run 'raptor workspace use' first")
 		}
+		var statuses []string
+		if cmd.Flags().Changed("statuses") {
+			s, _ := cmd.Flags().GetString("statuses")
+			for _, st := range strings.Split(s, ",") {
+				st = strings.TrimSpace(st)
+				if st != "" {
+					statuses = append(statuses, st)
+				}
+			}
+		}
 		c := newUnscopedClient()
-		bd, err := c.CreateBoard(activeWS, args[0])
+		bd, err := c.CreateBoard(activeWS, args[0], statuses)
 		if err != nil {
 			return err
 		}
@@ -30,6 +40,9 @@ var bdCreateCmd = &cobra.Command{
 			printJSON(bd)
 		} else {
 			fmt.Printf("Created board %s: %s\n", bd.ID, bd.Name)
+			if cmd.Flags().Changed("statuses") {
+				fmt.Printf("Statuses: %s\n", bd.Statuses)
+			}
 		}
 		return nil
 	},
@@ -60,7 +73,7 @@ var bdListCmd = &cobra.Command{
 			if bd.ID == activeBoard {
 				marker = " (active)"
 			}
-			fmt.Printf("%s  %s%s\n", bd.ID, bd.Name, marker)
+			fmt.Printf("%s  %s  [%s]%s\n", bd.ID, bd.Name, bd.Statuses, marker)
 		}
 		return nil
 	},
@@ -95,68 +108,50 @@ var bdUseCmd = &cobra.Command{
 	},
 }
 
-var bdMembersCmd = &cobra.Command{
-	Use:   "members",
-	Short: "List board members",
+var bdEditCmd = &cobra.Command{
+	Use:   "edit",
+	Short: "Edit the active board (name, statuses)",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := requireBoard(); err != nil {
 			return err
 		}
+		fields := map[string]any{}
+		if cmd.Flags().Changed("name") {
+			name, _ := cmd.Flags().GetString("name")
+			fields["name"] = name
+		}
+		if cmd.Flags().Changed("statuses") {
+			s, _ := cmd.Flags().GetString("statuses")
+			var statuses []string
+			for _, st := range strings.Split(s, ",") {
+				st = strings.TrimSpace(st)
+				if st != "" {
+					statuses = append(statuses, st)
+				}
+			}
+			fields["statuses"] = statuses
+		}
+		if len(fields) == 0 {
+			return fmt.Errorf("specify --name and/or --statuses")
+		}
 		c := newUnscopedClient()
-		members, err := c.ListBoardMembers(activeWS, activeBoard)
+		bd, err := c.UpdateBoard(activeWS, activeBoard, fields)
 		if err != nil {
 			return err
 		}
 		if jsonOutput {
-			printJSON(members)
-			return nil
+			printJSON(bd)
+		} else {
+			fmt.Printf("Updated board %s: %s [%s]\n", bd.ID, bd.Name, bd.Statuses)
 		}
-		if len(members) == 0 {
-			fmt.Println("No explicit board members. Owners and admins have implicit access.")
-			return nil
-		}
-		for _, m := range members {
-			fmt.Printf("%s\n", m.Username)
-		}
-		return nil
-	},
-}
-
-var bdGrantCmd = &cobra.Command{
-	Use:   "grant <username>",
-	Short: "Grant a user access to this board",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireBoard(); err != nil {
-			return err
-		}
-		c := newUnscopedClient()
-		if err := c.GrantBoardAccess(activeWS, activeBoard, args[0]); err != nil {
-			return err
-		}
-		fmt.Printf("Granted %s access to board\n", args[0])
-		return nil
-	},
-}
-
-var bdRevokeCmd = &cobra.Command{
-	Use:   "revoke <username>",
-	Short: "Revoke a user's access to this board",
-	Args:  cobra.ExactArgs(1),
-	RunE: func(cmd *cobra.Command, args []string) error {
-		if err := requireBoard(); err != nil {
-			return err
-		}
-		c := newUnscopedClient()
-		if err := c.RevokeBoardAccess(activeWS, activeBoard, args[0]); err != nil {
-			return err
-		}
-		fmt.Printf("Revoked %s access from board\n", args[0])
 		return nil
 	},
 }
 
 func init() {
-	boardCmd.AddCommand(bdCreateCmd, bdListCmd, bdUseCmd, bdMembersCmd, bdGrantCmd, bdRevokeCmd)
+	bdCreateCmd.Flags().String("statuses", "", "comma-separated statuses (default: todo,in_progress,done)")
+	bdEditCmd.Flags().String("name", "", "new board name")
+	bdEditCmd.Flags().String("statuses", "", "comma-separated statuses")
+	boardCmd.AddCommand(bdCreateCmd, bdListCmd, bdUseCmd, bdEditCmd)
 	rootCmd.AddCommand(boardCmd)
 }

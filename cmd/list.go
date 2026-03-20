@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"hash/fnv"
 	"raptor/client"
 	"raptor/model"
 
@@ -13,14 +14,13 @@ import (
 var (
 	listStatus string
 	listMine   bool
-	listAll    bool
 )
 
-var statusColors = map[string]lipgloss.Color{
-	"todo":        lipgloss.Color("12"),
-	"in_progress": lipgloss.Color("11"),
-	"done":        lipgloss.Color("10"),
-	"closed":      lipgloss.Color("8"),
+// Auto-assign colors from a palette based on column index.
+var statusPalette = []lipgloss.Color{
+	lipgloss.Color("12"), lipgloss.Color("11"), lipgloss.Color("10"),
+	lipgloss.Color("13"), lipgloss.Color("14"), lipgloss.Color("9"),
+	lipgloss.Color("8"),
 }
 
 var headerStyle = lipgloss.NewStyle().Bold(true).Padding(0, 1)
@@ -36,12 +36,11 @@ func renderTicketTable(tickets []model.Ticket) string {
 				return headerStyle
 			}
 			s := cellStyle
-			// Color the status column
 			if col == 1 && row >= 0 && row < len(tickets) {
 				status := string(tickets[row].Status)
-				if c, ok := statusColors[status]; ok {
-					s = s.Foreground(c)
-				}
+				h := fnv.New32a()
+				h.Write([]byte(status))
+				s = s.Foreground(statusPalette[h.Sum32()%uint32(len(statusPalette))])
 			}
 			return s
 		})
@@ -68,7 +67,7 @@ var listCmd = &cobra.Command{
 			return err
 		}
 		c := newClient()
-		tickets, err := c.ListTickets(client.ListOptions{Status: listStatus, Mine: listMine, All: listAll})
+		tickets, err := c.ListTickets(client.ListOptions{Status: listStatus, Mine: listMine})
 		if err != nil {
 			return err
 		}
@@ -86,8 +85,7 @@ var listCmd = &cobra.Command{
 }
 
 func init() {
-	listCmd.Flags().StringVarP(&listStatus, "status", "s", "", "filter by status (todo, in_progress, done, closed)")
+	listCmd.Flags().StringVarP(&listStatus, "status", "s", "", "filter by status")
 	listCmd.Flags().BoolVar(&listMine, "mine", false, "show only my tickets")
-	listCmd.Flags().BoolVar(&listAll, "all", false, "include closed tickets")
 	rootCmd.AddCommand(listCmd)
 }
