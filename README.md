@@ -1,15 +1,41 @@
-# raptor
+# Raptor
 
-To install dependencies:
+A multiplayer CLI kanban board with real-time sync.
 
-```bash
-bun install
+## Quick Start
+
+```sh
+# Build
+go build -o raptor .
+
+# Start server
+./raptor serve
+
+# In another terminal — launch TUI
+./raptor
+
+# Or use CLI commands
+./raptor add "My first task" --content "# Details here"
+./raptor list
+./raptor move <id> in_progress
 ```
 
-To run:
+## TUI Keys
 
-```bash
-bun run index.ts
-```
+| Key | Action |
+|-----|--------|
+| h/l, ←/→ | Switch column |
+| j/k, ↑/↓ | Navigate tickets |
+| Enter | View ticket detail |
+| n | New ticket |
+| m | Move ticket (cycle status) |
+| e | Edit ticket |
+| d | Delete ticket |
+| r | Refresh |
+| q | Quit |
 
-This project was created using `bun init` in bun v1.2.18. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime.
+## Architecture
+
+Go server with SQLite persistence, WebSocket for real-time broadcast, Charm TUI.
+
+Two terminals running `raptor` will see each other's changes in real-time.

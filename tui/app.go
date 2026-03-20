@@ -9,7 +9,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"nhooyr.io/websocket"
 )
@@ -140,12 +139,7 @@ func (a *App) updateBoard(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.Enter):
 		if t := a.SelectedTicket(); t != nil {
 			a.state = viewDetail
-			rendered, err := glamour.Render(fmt.Sprintf("# %s\n\n**Status:** %s\n\n---\n\n%s", t.Title, t.Status, t.Content), "dark")
-			if err != nil {
-				a.detailText = t.Content
-			} else {
-				a.detailText = rendered
-			}
+			a.detailText = RenderTicketDetail(*t)
 		}
 	case key.Matches(msg, keys.Move):
 		if t := a.SelectedTicket(); t != nil {
