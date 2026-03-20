@@ -11,12 +11,14 @@ import (
 var (
 	listStatus string
 	listMine   bool
+	listAll    bool
 )
 
 var statusStyle = map[string]lipgloss.Style{
 	"todo":        lipgloss.NewStyle().Foreground(lipgloss.Color("12")),
 	"in_progress": lipgloss.NewStyle().Foreground(lipgloss.Color("11")),
 	"done":        lipgloss.NewStyle().Foreground(lipgloss.Color("10")),
+	"closed":      lipgloss.NewStyle().Foreground(lipgloss.Color("8")),
 }
 
 var listCmd = &cobra.Command{
@@ -27,7 +29,7 @@ var listCmd = &cobra.Command{
 			return err
 		}
 		c := client.NewScoped(serverURL, authToken, activeWS, activeBoard)
-		tickets, err := c.ListTickets(listStatus, listMine)
+		tickets, err := c.ListTickets(listStatus, listMine, listAll)
 		if err != nil {
 			return err
 		}
@@ -51,7 +53,8 @@ var listCmd = &cobra.Command{
 }
 
 func init() {
-	listCmd.Flags().StringVarP(&listStatus, "status", "s", "", "filter by status (todo, in_progress, done)")
+	listCmd.Flags().StringVarP(&listStatus, "status", "s", "", "filter by status (todo, in_progress, done, closed)")
 	listCmd.Flags().BoolVar(&listMine, "mine", false, "show only my tickets")
+	listCmd.Flags().BoolVar(&listAll, "all", false, "include closed tickets")
 	rootCmd.AddCommand(listCmd)
 }

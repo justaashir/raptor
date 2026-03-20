@@ -66,9 +66,13 @@ func (c *Client) CreateTicket(title, content, assignee string) (model.Ticket, er
 	return ticket, nil
 }
 
-func (c *Client) ListTickets(status string, mine bool) ([]model.Ticket, error) {
+func (c *Client) ListTickets(status string, mine bool, all ...bool) ([]model.Ticket, error) {
 	url := c.ticketsURL()
 	sep := "?"
+	if len(all) > 0 && all[0] {
+		url += sep + "all=true"
+		sep = "&"
+	}
 	if status != "" {
 		url += sep + "status=" + status
 		sep = "&"

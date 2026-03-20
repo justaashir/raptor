@@ -3,6 +3,7 @@ package server
 import (
 	"raptor/model"
 	"testing"
+	"time"
 )
 
 func TestDB_CreateAndGetTicket(t *testing.T) {
@@ -413,6 +414,75 @@ func TestDB_DeleteWorkspace(t *testing.T) {
 	workspaces, _ := db.ListWorkspacesForUser("alice")
 	if len(workspaces) != 0 {
 		t.Fatalf("expected 0 workspaces after delete, got %d", len(workspaces))
+	}
+}
+
+func TestDB_CloseTicket_SetsClosedStatusAndReason(t *testing.T) {
+	db := newTestDB(t)
+	ticket := model.NewTicket("Close me", "", "alice")
+	db.CreateTicket(ticket)
+
+	now := time.Now()
+	err := db.UpdateTicket(ticket.ID, map[string]any{
+		"status":       "closed",
+		"close_reason": "done with this",
+		"closed_at":    now,
+	})
+	if err != nil {
+		t.Fatalf("failed to close ticket: %v", err)
+	}
+
+	got, _ := db.GetTicket(ticket.ID)
+	if got.Status != model.Closed {
+		t.Fatalf("expected status closed, got %q", got.Status)
+	}
+	if got.CloseReason != "done with this" {
+		t.Fatalf("expected close reason %q, got %q", "done with this", got.CloseReason)
+	}
+	if got.ClosedAt == nil {
+		t.Fatal("expected ClosedAt to be set")
+	}
+}
+
+func TestDB_ListTickets_ExcludesClosedByDefault(t *testing.T) {
+	db := newTestDB(t)
+	t1 := model.NewTicket("Open task", "", "alice")
+	db.CreateTicket(t1)
+
+	t2 := model.NewTicket("Closed task", "", "alice")
+	t2.Status = model.Closed
+	db.CreateTicket(t2)
+
+	tickets, err := db.ListTickets("", "")
+	if err != nil {
+		t.Fatalf("failed to list: %v", err)
+	}
+	if len(tickets) != 1 {
+		t.Fatalf("expected 1 ticket (closed excluded), got %d", len(tickets))
+	}
+	if tickets[0].Title != "Open task" {
+		t.Fatalf("expected Open task, got %q", tickets[0].Title)
+	}
+}
+
+func TestDB_ListTickets_IncludesClosedWhenFiltered(t *testing.T) {
+	db := newTestDB(t)
+	t1 := model.NewTicket("Open task", "", "alice")
+	db.CreateTicket(t1)
+
+	t2 := model.NewTicket("Closed task", "", "alice")
+	t2.Status = model.Closed
+	db.CreateTicket(t2)
+
+	tickets, err := db.ListTickets("", "closed")
+	if err != nil {
+		t.Fatalf("failed to list: %v", err)
+	}
+	if len(tickets) != 1 {
+		t.Fatalf("expected 1 closed ticket, got %d", len(tickets))
+	}
+	if tickets[0].Title != "Closed task" {
+		t.Fatalf("expected Closed task, got %q", tickets[0].Title)
 	}
 }
 

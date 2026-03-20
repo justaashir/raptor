@@ -556,6 +556,58 @@ func TestServer_CreatedByFromAuth(t *testing.T) {
 	}
 }
 
+func TestServer_ListTickets_ExcludesClosedByDefault(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
+	token := GenerateToken("alice", "secret")
+	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
+
+	// Create open ticket
+	body := `{"title":"Open task"}`
+	req := httptest.NewRequest("POST", ticketURL(wsID, bdID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	// Create and close a ticket
+	body = `{"title":"Will close"}`
+	req = httptest.NewRequest("POST", ticketURL(wsID, bdID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	var closed model.Ticket
+	json.NewDecoder(w.Body).Decode(&closed)
+
+	body = `{"status":"closed","close_reason":"not needed"}`
+	req = httptest.NewRequest("PATCH", ticketURL(wsID, bdID)+"/"+closed.ID, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	// Default list should exclude closed
+	req = httptest.NewRequest("GET", ticketURL(wsID, bdID), nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	var tickets []model.Ticket
+	json.NewDecoder(w.Body).Decode(&tickets)
+	if len(tickets) != 1 {
+		t.Fatalf("expected 1 ticket (closed excluded), got %d", len(tickets))
+	}
+
+	// all=true should include closed
+	req = httptest.NewRequest("GET", ticketURL(wsID, bdID)+"?all=true", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	json.NewDecoder(w.Body).Decode(&tickets)
+	if len(tickets) != 2 {
+		t.Fatalf("expected 2 tickets with all=true, got %d", len(tickets))
+	}
+}
+
 func TestServer_ListMine(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice", "bob"})
 	tokenAlice := GenerateToken("alice", "secret")

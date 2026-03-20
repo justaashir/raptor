@@ -12,6 +12,7 @@ const (
 	Todo       Status = "todo"
 	InProgress Status = "in_progress"
 	Done       Status = "done"
+	Closed     Status = "closed"
 )
 
 type Ticket struct {
@@ -23,13 +24,15 @@ type Ticket struct {
 	CreatedBy  string    `json:"created_by" gorm:"default:''"`
 	Assignee   string    `json:"assignee" gorm:"default:''"`
 	AssignedBy string    `json:"assigned_by" gorm:"default:''"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	ClosedAt    *time.Time `json:"closed_at,omitempty"`
+	CloseReason string     `json:"close_reason,omitempty" gorm:"default:''"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
 func ValidStatus(s Status) bool {
 	switch s {
-	case Todo, InProgress, Done:
+	case Todo, InProgress, Done, Closed:
 		return true
 	}
 	return false

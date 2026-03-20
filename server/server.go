@@ -460,7 +460,14 @@ func (s *Server) handleBoardTickets(w http.ResponseWriter, r *http.Request, wid,
 	case http.MethodGet:
 		status := r.URL.Query().Get("status")
 		mine := r.URL.Query().Get("mine")
-		tickets, err := s.db.ListTickets(bid, status)
+		all := r.URL.Query().Get("all")
+		var tickets []model.Ticket
+		var err error
+		if all == "true" {
+			tickets, err = s.db.ListAllTickets(bid)
+		} else {
+			tickets, err = s.db.ListTickets(bid, status)
+		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
