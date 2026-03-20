@@ -51,55 +51,53 @@ func (d ticketDelegate) Render(w io.Writer, m list.Model, index int, listItem li
 	}
 	t := ti.ticket
 
-	icon := StatusIcon(t.Status)
 	status := padRight(FormatStatus(t.Status), 8)
 	id := padRight(t.ID, 10)
 	assignee := "·"
 	if t.Assignee != "" {
 		assignee = "@" + t.Assignee
 	}
-	assignee = padRight(assignee, 12)
-	age := padRight(FormatAge(t.CreatedAt), 6)
+	assignee = padRight(assignee, 10)
+	age := padRight(FormatAge(t.CreatedAt), 5)
 
-	// Fixed: emoji(2) + space + status(8) + id(10) + assignee(12) + age(6) = 39
-	fixedW := 39
+	// Prefix: icon(2) + star(2) + spaces(2) = 6, then columns
+	fixedW := 6 + 8 + 10 + 10 + 5
 	titleW := d.width - fixedW
-	if titleW < 4 {
-		titleW = 4
+	if titleW < 3 {
+		titleW = 3
 	}
 	title := truncate(t.Title, titleW)
 
-	star := StatusStar(t.Status)
 	statusColor := StatusColor(t.Status)
+	icon := StatusIcon(t.Status)
+	star := StatusStar(t.Status)
 
 	if index == m.Index() {
-		// Selected row — bright highlight
+		raw := fmt.Sprintf("%s%s %s%s%s%s%s", icon, star, status, id, assignee, age, title)
 		row := lipgloss.NewStyle().
 			Background(colorLine).
 			Foreground(colorFg).
 			Bold(true).
-			Width(d.width).
-			Render(fmt.Sprintf("%s %s %s%s%s%s%s",
-				icon, star, status, id, assignee, age, title))
+			MaxWidth(d.width).
+			Render(raw)
 		fmt.Fprint(w, row)
 		return
 	}
 
-	// Normal row — each column styled, bold title for open tickets
-	titleRendered := lipgloss.NewStyle().Foreground(colorFg).Render(title)
+	titleStyle := lipgloss.NewStyle().Foreground(colorFg)
 	if t.Status == model.Todo || t.Status == model.InProgress {
-		titleRendered = lipgloss.NewStyle().Foreground(colorFg).Bold(true).Render(title)
+		titleStyle = titleStyle.Bold(true)
 	}
 
-	fmt.Fprintf(w, "%s %s %s%s%s%s%s",
-		icon,
-		star,
+	raw := fmt.Sprintf("%s%s %s%s%s%s%s",
+		icon, star,
 		lipgloss.NewStyle().Foreground(statusColor).Render(status),
 		lipgloss.NewStyle().Foreground(colorComment).Render(id),
 		lipgloss.NewStyle().Foreground(colorPurple).Render(assignee),
 		lipgloss.NewStyle().Foreground(colorComment).Render(age),
-		titleRendered,
+		titleStyle.Render(title),
 	)
+	fmt.Fprint(w, lipgloss.NewStyle().MaxWidth(d.width).Render(raw))
 }
 
 // padRight pads s with spaces to width.
@@ -237,12 +235,16 @@ func (lp *ListPane) Update(msg tea.Msg) tea.Cmd {
 	return cmd
 }
 
-// View renders the column header + list.
-func (lp *ListPane) View() string {
-	header := ColumnHeaderStyle.Width(lp.width).Render(
-		fmt.Sprintf("   %-8s %-10s %-12s %-6s %s",
+// ColumnHeader returns the styled column header string.
+func (lp *ListPane) ColumnHeader() string {
+	return ColumnHeaderStyle.Width(lp.width).Render(
+		fmt.Sprintf("    %-8s %-10s %-10s %-5s %s",
 			"STATUS", "ID", "ASSIGNEE", "AGE", "TITLE"))
-	return header + "\n" + lp.list.View()
+}
+
+// View renders the list.
+func (lp *ListPane) View() string {
+	return lp.list.View()
 }
 
 // SetSize updates the pane dimensions.
@@ -250,6 +252,6 @@ func (lp *ListPane) SetSize(width, height int) {
 	lp.width = width
 	lp.height = height
 	lp.list.SetWidth(width)
-	lp.list.SetHeight(height - 1) // -1 for column header
+	lp.list.SetHeight(height)
 	lp.list.SetDelegate(ticketDelegate{width: width})
 }

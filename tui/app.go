@@ -69,7 +69,7 @@ func (a *App) initPanes() {
 }
 
 func (a *App) paneSizes() (listW, detailW, contentH int) {
-	contentH = a.height - 3 // header + status bar + border
+	contentH = a.height - 4 // header + status bar + borders
 	if contentH < 5 {
 		contentH = 5
 	}
@@ -246,10 +246,12 @@ func (a *App) View() string {
 
 	listW, detailW, contentH := a.paneSizes()
 
+	// Column header + list content inside the border
+	listContent := a.listPane.ColumnHeader() + "\n" + a.listPane.View()
 	listView := listStyle.
 		Width(listW).
 		Height(contentH).
-		Render(a.listPane.View())
+		Render(listContent)
 
 	detailView := detailStyle.
 		Width(detailW).

@@ -93,12 +93,6 @@ func RenderDetailContent(t *model.Ticket, width int, renderer ...*glamour.TermRe
 		)
 	}
 
-	dates := fmt.Sprintf(
-		"%s %s",
-		DetailMetaKeyStyle.Render("Updated"),
-		lipgloss.NewStyle().Foreground(colorComment).Render(t.UpdatedAt.Format("2006-01-02 15:04")),
-	)
-
 	var body string
 	if t.Content != "" {
 		// Use cached renderer if provided, otherwise create one
@@ -122,7 +116,7 @@ func RenderDetailContent(t *model.Ticket, width int, renderer ...*glamour.TermRe
 
 	separator := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("─────────────────────────────")
 
-	return title + "\n\n" + metaLines + "\n" + dates + "\n\n" + separator + "\n" + body
+	return title + "\n\n" + metaLines + "\n\n" + separator + "\n" + body
 }
 
 // SetTicket updates the detail pane with a new ticket.
