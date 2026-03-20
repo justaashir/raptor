@@ -67,6 +67,11 @@ done
 echo "$VERSION" > "$ROOT_DIR/VERSION"
 railway variables set VERSION="$VERSION" 2>/dev/null || echo "Warning: could not set Railway VERSION (set manually)"
 
+# Deploy server to Railway
+echo "Deploying server..."
+cd "$ROOT_DIR"
+railway up --detach
+
 cd "$ROOT_DIR"
 git add VERSION
 git commit -m "Release v${VERSION}" || true
