@@ -27,6 +27,27 @@ go test ./...              # Run all tests
 - Charm stack: bubbletea, lipgloss, glamour, huh
 - cobra for CLI, nhooyr.io/websocket, modernc.org/sqlite (pure Go)
 
+### Deployment
+
+- **Server**: Railway at `https://raptor.raptorthree.com`
+- **Volume**: mounted at `/data`, stores `raptor.db` + release binaries
+- **Env vars on Railway**: `DATABASE_PATH=/data/raptor.db`, `VERSION=<current>`, `PORT` (set by Railway)
+- Auto-deploys on push to `main`
+
+### Releasing
+
+1. Bump version in `VERSION` file
+2. Update `VERSION` env var on Railway: `railway variables set VERSION=x.y.z`
+3. Run `scripts/release.sh` — reads version from `VERSION` file, cross-compiles, uploads to Railway + creates GitHub release
+4. Users get update prompt on next CLI invocation, run `raptor update` to self-update
+
+```sh
+# Full release flow
+echo "0.2.0" > VERSION
+railway variables set VERSION=0.2.0
+scripts/release.sh
+```
+
 ### Testing
 
 TDD throughout. `go test ./...` runs all tests. In-memory SQLite for server tests.

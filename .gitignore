@@ -1,5 +1,6 @@
 # Binary
 raptor
+dist/
 
 # Database
 *.db
