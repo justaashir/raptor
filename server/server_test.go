@@ -824,3 +824,52 @@ func TestServer_MemberSeesAllBoards(t *testing.T) {
 		t.Fatalf("expected 2 boards for member, got %d", len(boards))
 	}
 }
+
+func TestServer_AssignNonMember(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{"alice", "bob"})
+	tokenAlice := mustToken(t, "alice", "secret")
+	wsID, bdID := setupWorkspaceAndBoard(t, srv, tokenAlice)
+
+	// Create ticket with assignee who is not a workspace member → should fail
+	body := `{"title":"task","content":"desc","assignee":"charlie"}`
+	req := httptest.NewRequest("POST", ticketURL(wsID, bdID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenAlice)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("create with non-member assignee: expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Create ticket with assignee who IS a member → should succeed
+	// First invite bob
+	body = `{"username":"bob"}`
+	req = httptest.NewRequest("POST", "/api/workspaces/"+wsID+"/members", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenAlice)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	body = `{"title":"task","content":"desc","assignee":"bob"}`
+	req = httptest.NewRequest("POST", ticketURL(wsID, bdID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenAlice)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create with member assignee: expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+	var ticket model.Ticket
+	json.NewDecoder(w.Body).Decode(&ticket)
+
+	// Update ticket to assign non-member → should fail
+	body = `{"assignee":"charlie"}`
+	req = httptest.NewRequest("PATCH", ticketURL(wsID, bdID)+"/"+ticket.ID, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+tokenAlice)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("update with non-member assignee: expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
