@@ -874,6 +874,28 @@ func TestServer_AssignNonMember(t *testing.T) {
 	}
 }
 
+func TestServer_GetTicket_NotFound_ReturnsJSON(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
+	token := mustToken(t, "alice", "secret")
+	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
+
+	req := httptest.NewRequest("GET", ticketURL(wsID, bdID)+"/nonexistent", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", w.Code)
+	}
+	var errResp map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&errResp); err != nil {
+		t.Fatalf("expected JSON error response, got: %s", w.Body.String())
+	}
+	if errResp["error"] == "" {
+		t.Fatal("expected error field in JSON response")
+	}
+}
+
 func TestServer_UpdateBoard_RejectsInvalidStatuses(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
 	token := mustToken(t, "alice", "secret")
