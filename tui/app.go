@@ -413,7 +413,16 @@ func (a *App) View() string {
 		statusBar = errStyle.Render(fmt.Sprintf("Error: %v", a.err))
 	}
 
-	bg := lipgloss.JoinVertical(lipgloss.Left, header, panes, statusBar)
+	// Pad the view to fill the terminal so switching from overlay
+	// (which renders exactly a.height lines) doesn't leave stale lines.
+	content := lipgloss.JoinVertical(lipgloss.Left, header, panes)
+	contentLines := strings.Count(content, "\n") + 1
+	statusLines := strings.Count(statusBar, "\n") + 1
+	gap := a.height - contentLines - statusLines
+	if gap < 0 {
+		gap = 0
+	}
+	bg := content + strings.Repeat("\n", gap) + "\n" + statusBar
 
 	if a.state == viewCreate {
 		titleStyle := lipgloss.NewStyle().Bold(true).Foreground(colorCyan)
