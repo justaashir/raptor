@@ -237,6 +237,24 @@ func TestApp_SingleBoard_AutoSelectsAndGoesToList(t *testing.T) {
 	}
 }
 
+func TestApp_BoardSelector_EscGoesBackToWorkspaceSelector(t *testing.T) {
+	app := NewApp("http://localhost:8080", "", "ws1", "")
+	app.state = viewBoardSelect
+	app.boardChoices = []model.Board{
+		{ID: "b1", Name: "Board 1"},
+		{ID: "b2", Name: "Board 2"},
+	}
+
+	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	if cmd == nil {
+		t.Fatal("expected a command to fetch workspaces")
+	}
+	// workspace should be cleared so the full flow restarts
+	if app.workspace != "" {
+		t.Fatalf("expected workspace cleared, got '%s'", app.workspace)
+	}
+}
+
 func TestApp_AllTickets_StoredForStatusBar(t *testing.T) {
 	app := NewApp("http://localhost:8080", "", "", "")
 	app.width = 120

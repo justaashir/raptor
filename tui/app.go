@@ -212,6 +212,10 @@ func (a *App) updateBoardSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.Quit):
 		a.quitting = true
 		return a, tea.Quit
+	case key.Matches(msg, keys.Back):
+		a.workspace = ""
+		a.wsName = ""
+		return a, a.fetchWorkspaces
 	case key.Matches(msg, keys.Up):
 		if a.boardCursor > 0 {
 			a.boardCursor--
@@ -353,10 +357,11 @@ func (a *App) viewWorkspaceSelector() string {
 
 func (a *App) viewBoardSelector() string {
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("14"))
-	s := titleStyle.Render("Select a board") + "\n\n"
+	wsStyle := lipgloss.NewStyle().Foreground(colorComment)
+	s := titleStyle.Render("Select a board") + "  " + wsStyle.Render(a.wsName) + "\n\n"
 
 	if len(a.boardChoices) == 0 {
-		return s + "No boards found. Create one with 'raptor board create'.\n\nPress q to quit."
+		return s + "No boards found. Create one with 'raptor board create'.\n\nPress esc to go back • q to quit."
 	}
 
 	for i, b := range a.boardChoices {
@@ -366,7 +371,7 @@ func (a *App) viewBoardSelector() string {
 		}
 		s += fmt.Sprintf("%s%s (%s)\n", cursor, b.Name, b.ID)
 	}
-	s += "\n↑/↓ navigate • enter select • q quit"
+	s += "\n↑/↓ navigate • enter select • esc back • q quit"
 	return s
 }
 
