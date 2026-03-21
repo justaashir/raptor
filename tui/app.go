@@ -391,7 +391,7 @@ func (a *App) View() string {
 		Render(a.detailPane.View())
 
 	panes := lipgloss.JoinHorizontal(lipgloss.Top, listView, detailView)
-	statusBar := RenderStatusBar(a.tickets, a.boardName, a.focused, a.width)
+	statusBar := RenderStatusBar(a.tickets, a.boardName, a.width)
 
 	if a.err != nil {
 		errStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
