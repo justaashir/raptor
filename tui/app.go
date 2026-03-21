@@ -421,7 +421,7 @@ func (a *App) View() string {
 		helpStyle := lipgloss.NewStyle().Foreground(colorComment)
 		helpLine := keyStyle.Render("enter") + helpStyle.Render(" submit  ") +
 			keyStyle.Render("tab") + helpStyle.Render(" next  ") +
-			keyStyle.Render("q") + helpStyle.Render(" cancel")
+			keyStyle.Render("esc") + helpStyle.Render(" cancel")
 
 		title := titleStyle.Render("New ticket")
 		formView := a.createForm.View()
@@ -511,9 +511,9 @@ func (a *App) updateCreate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.height = wsMsg.Height
 		a.initPanes()
 	}
-	// Check for esc to cancel
+	// Only esc cancels — don't intercept 'q' so it can be typed in fields
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
-		if key.Matches(keyMsg, keys.Quit) {
+		if keyMsg.Type == tea.KeyEscape {
 			a.state = viewList
 			return a, nil
 		}

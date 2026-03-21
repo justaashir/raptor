@@ -324,8 +324,8 @@ func TestApp_CreateView_CancelReturnsToListWithoutOverlay(t *testing.T) {
 		t.Fatalf("expected viewCreate, got %d", app.state)
 	}
 
-	// Cancel with q
-	app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	// Cancel with esc
+	app.Update(tea.KeyMsg{Type: tea.KeyEscape})
 	if app.state != viewList {
 		t.Fatalf("expected viewList after cancel, got %d", app.state)
 	}
