@@ -2,6 +2,7 @@ package tui
 
 import (
 	"raptor/model"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
@@ -39,6 +40,22 @@ func TestStatusColor_ReturnsCorrectColors(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("StatusColor(review) = %v, expected a palette color", got)
+	}
+}
+
+func TestRenderFloatingWindow_ContainsContent(t *testing.T) {
+	content := "Hello World"
+	result := RenderFloatingWindow(content, 30, 10, 80, 24)
+	if !strings.Contains(result, "Hello World") {
+		t.Fatalf("floating window should contain content, got:\n%s", result)
+	}
+}
+
+func TestRenderFloatingWindow_HasBorder(t *testing.T) {
+	result := RenderFloatingWindow("test", 30, 10, 80, 24)
+	// Should contain rounded border characters
+	if !strings.Contains(result, "╭") {
+		t.Fatalf("floating window should have rounded border, got:\n%s", result)
 	}
 }
 

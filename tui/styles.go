@@ -68,6 +68,21 @@ func StatusStar(s model.Status) string {
 	}
 }
 
+// RenderFloatingWindow renders content inside a centered floating box
+// with a rounded border, overlaid on top of a blank background.
+func RenderFloatingWindow(content string, boxW, boxH, termW, termH int) string {
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(colorPurple).
+		Background(colorBg).
+		Foreground(colorFg).
+		Width(boxW).
+		Height(boxH).
+		Padding(1, 2).
+		Render(content)
+	return lipgloss.Place(termW, termH, lipgloss.Center, lipgloss.Center, box)
+}
+
 // Pane styles
 var (
 	FocusedBorderStyle = lipgloss.NewStyle().
