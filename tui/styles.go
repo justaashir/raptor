@@ -4,6 +4,7 @@ import (
 	"raptor/model"
 	"strings"
 
+	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -129,6 +130,21 @@ func OverlayOnBackground(content string, boxW, boxH int, bg string, termW, termH
 	}
 
 	return strings.Join(bgLines[:termH], "\n")
+}
+
+// createFormTheme returns a Dracula-based huh theme with rounded field borders.
+func createFormTheme() *huh.Theme {
+	t := huh.ThemeDracula()
+	// Replace thick left-bar with a full rounded border on focused fields
+	t.Focused.Base = t.Focused.Base.
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderLeft(true).BorderRight(true).BorderTop(true).BorderBottom(true).
+		BorderForeground(lipgloss.AdaptiveColor{Dark: "#bd93f9"})
+	t.Blurred.Base = t.Blurred.Base.
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderLeft(true).BorderRight(true).BorderTop(true).BorderBottom(true).
+		BorderForeground(lipgloss.AdaptiveColor{Dark: "#44475a"})
+	return t
 }
 
 // Pane styles

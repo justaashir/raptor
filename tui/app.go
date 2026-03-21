@@ -476,7 +476,7 @@ func (a *App) startCreateForm() tea.Cmd {
 				Placeholder("Details (markdown)...").
 				Value(&a.newContent),
 		),
-	).WithWidth(50).WithShowHelp(false).WithShowErrors(true).WithTheme(huh.ThemeDracula())
+	).WithWidth(50).WithShowHelp(false).WithShowErrors(true).WithTheme(createFormTheme())
 	a.state = viewCreate
 	return a.createForm.Init()
 }
