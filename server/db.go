@@ -30,6 +30,12 @@ func NewDB(dsn string) (*DB, error) {
 	if err := conn.Exec("PRAGMA journal_mode = WAL").Error; err != nil {
 		return nil, err
 	}
+	if err := conn.Exec("PRAGMA busy_timeout = 5000").Error; err != nil {
+		return nil, err
+	}
+	if err := conn.Exec("PRAGMA synchronous = NORMAL").Error; err != nil {
+		return nil, err
+	}
 
 	// Auto-migrate all models (foreign keys OFF during migration to prevent
 	// CASCADE deletes when GORM recreates tables via drop-and-rename)
@@ -51,6 +57,12 @@ func NewDB(dsn string) (*DB, error) {
 	if err := seed(conn); err != nil {
 		return nil, err
 	}
+
+	sqlDB, err := conn.DB()
+	if err != nil {
+		return nil, err
+	}
+	sqlDB.SetMaxOpenConns(1)
 
 	return &DB{conn: conn}, nil
 }
