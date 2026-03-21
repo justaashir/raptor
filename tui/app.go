@@ -16,6 +16,14 @@ import (
 	"nhooyr.io/websocket"
 )
 
+// Create modal dimensions: box padding is 2 on each side, so form width = box width - 4.
+const (
+	createBoxW  = 56
+	createBoxH  = 16
+	createBoxPad = 2
+	createFormW = createBoxW - createBoxPad*2
+)
+
 type viewState int
 
 const (
@@ -402,12 +410,10 @@ func (a *App) View() string {
 		helpLine := keyStyle.Render("enter") + helpStyle.Render(" submit  ") +
 			keyStyle.Render("tab") + helpStyle.Render(" next  ") +
 			keyStyle.Render("q") + helpStyle.Render(" cancel")
-		formContent := titleStyle.Render("  New ticket") + "\n\n" +
+		formContent := titleStyle.Render("New ticket") + "\n\n" +
 			a.createForm.View() + "\n" +
-			"  " + helpLine
-		boxW := 56
-		boxH := 16
-		return OverlayOnBackground(formContent, boxW, boxH, bg, a.width, a.height)
+			helpLine
+		return OverlayOnBackground(formContent, createBoxW, createBoxH, bg, a.width, a.height)
 	}
 
 	return bg
@@ -476,7 +482,7 @@ func (a *App) startCreateForm() tea.Cmd {
 				Placeholder("Details (markdown)...").
 				Value(&a.newContent),
 		),
-	).WithWidth(50).WithShowHelp(false).WithShowErrors(true).WithTheme(createFormTheme())
+	).WithWidth(createFormW).WithShowHelp(false).WithShowErrors(true).WithTheme(createFormTheme())
 	a.state = viewCreate
 	return a.createForm.Init()
 }
