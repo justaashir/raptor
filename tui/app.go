@@ -406,7 +406,7 @@ func (a *App) View() string {
 	content := lipgloss.JoinVertical(lipgloss.Left, header, panes)
 	contentLines := strings.Count(content, "\n") + 1
 	statusLines := strings.Count(statusBar, "\n") + 1
-	gap := a.height - contentLines - statusLines - 1 // -1 for the joining newline
+	gap := a.height - contentLines - statusLines
 	if gap < 0 {
 		gap = 0
 	}
