@@ -960,3 +960,21 @@ func TestServer_Auth_RejectsInvalidUsername(t *testing.T) {
 		})
 	}
 }
+
+func TestServer_CreateTicket_RejectsLongTitle(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
+	token := mustToken(t, "alice", "secret")
+	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
+
+	longTitle := strings.Repeat("a", 501)
+	body := fmt.Sprintf(`{"title":"%s"}`, longTitle)
+	req := httptest.NewRequest("POST", ticketURL(wsID, bdID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for long title, got %d", w.Code)
+	}
+}

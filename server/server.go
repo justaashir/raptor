@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	"gorm.io/gorm"
 	"nhooyr.io/websocket"
 )
@@ -42,6 +43,7 @@ func NewServer(db *DB, hub *Hub, opts ...Option) *Server {
 	s := &Server{db: db, hub: hub, Echo: echo.New()}
 	s.Echo.HideBanner = true
 	s.Echo.HidePort = true
+	s.Echo.Use(middleware.BodyLimit("1M"))
 	for _, o := range opts {
 		o(s)
 	}
@@ -93,6 +95,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func jsonErr(c echo.Context, code int, msg string) error {
 	return c.JSON(code, map[string]string{"error": msg})
+}
+
+func validateTicketFields(title, content string) string {
+	if len(title) > 500 {
+		return "title too long (max 500 characters)"
+	}
+	if len(content) > 100000 {
+		return "content too long (max 100000 characters)"
+	}
+	return ""
 }
 
 func username(c echo.Context) string {
@@ -467,6 +479,9 @@ func (s *Server) createTicket(c echo.Context) error {
 	if err := c.Bind(&input); err != nil {
 		return jsonErr(c, http.StatusBadRequest, "bad request")
 	}
+	if msg := validateTicketFields(input.Title, input.Content); msg != "" {
+		return jsonErr(c, http.StatusBadRequest, msg)
+	}
 	ticket := model.NewTicket(input.Title, input.Content, u)
 	ticket.BoardID = bid
 	// Set default status to the board's first status
@@ -547,6 +562,12 @@ func (s *Server) updateTicket(c echo.Context) error {
 	}
 	if len(fields) == 0 {
 		return jsonErr(c, http.StatusBadRequest, "no valid fields")
+	}
+	// Validate title/content length
+	title, _ := fields["title"].(string)
+	content, _ := fields["content"].(string)
+	if msg := validateTicketFields(title, content); msg != "" {
+		return jsonErr(c, http.StatusBadRequest, msg)
 	}
 	// Validate status against board's allowed statuses
 	if st, ok := fields["status"].(string); ok {
