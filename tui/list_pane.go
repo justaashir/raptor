@@ -218,6 +218,7 @@ func (lp *ListPane) SetTickets(tickets []model.Ticket) {
 		selectedID = old.ID
 	}
 
+	tickets = SortTicketsForSidebar(tickets)
 	lp.tickets = tickets
 
 	items := make([]list.Item, len(tickets))
