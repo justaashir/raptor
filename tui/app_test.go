@@ -2,8 +2,11 @@ package tui
 
 import (
 	"raptor/model"
+	"strings"
 	"testing"
 	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func sampleTickets() []model.Ticket {
@@ -84,6 +87,197 @@ func TestApp_SelectedTicket_NilWhenEmpty(t *testing.T) {
 	}
 }
 
+func TestApp_WorkspacesMsg_TransitionsToWorkspaceSelect(t *testing.T) {
+	app := NewApp("http://localhost:8080", "", "", "")
+	msg := workspacesMsg{
+		workspaces: []model.Workspace{
+			{ID: "ws1", Name: "Team Alpha"},
+			{ID: "ws2", Name: "Team Beta"},
+		},
+	}
+	app.Update(msg)
+	if app.state != viewWorkspaceSelect {
+		t.Fatalf("expected viewWorkspaceSelect, got %d", app.state)
+	}
+	if len(app.wsChoices) != 2 {
+		t.Fatalf("expected 2 workspace choices, got %d", len(app.wsChoices))
+	}
+}
+
+func TestApp_WorkspaceSelector_ShowsWorkspaceNames(t *testing.T) {
+	app := NewApp("http://localhost:8080", "", "", "")
+	app.state = viewWorkspaceSelect
+	app.wsChoices = []model.Workspace{
+		{ID: "ws1", Name: "Team Alpha"},
+		{ID: "ws2", Name: "Team Beta"},
+	}
+	app.wsCursor = 0
+	view := app.View()
+	if !strings.Contains(view, "Select a workspace") {
+		t.Fatal("should show 'Select a workspace' title")
+	}
+	if !strings.Contains(view, "Team Alpha") {
+		t.Fatal("should show workspace name 'Team Alpha'")
+	}
+	if !strings.Contains(view, "Team Beta") {
+		t.Fatal("should show workspace name 'Team Beta'")
+	}
+}
+
+func TestApp_WorkspaceSelector_NavigatesUpDown(t *testing.T) {
+	app := NewApp("http://localhost:8080", "", "", "")
+	app.state = viewWorkspaceSelect
+	app.wsChoices = []model.Workspace{
+		{ID: "ws1", Name: "Team Alpha"},
+		{ID: "ws2", Name: "Team Beta"},
+		{ID: "ws3", Name: "Team Gamma"},
+	}
+	app.wsCursor = 0
+
+	// Move down
+	app.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if app.wsCursor != 1 {
+		t.Fatalf("expected cursor 1 after down, got %d", app.wsCursor)
+	}
+
+	// Move down again
+	app.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if app.wsCursor != 2 {
+		t.Fatalf("expected cursor 2 after second down, got %d", app.wsCursor)
+	}
+
+	// Should not go past last
+	app.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if app.wsCursor != 2 {
+		t.Fatalf("expected cursor 2 (clamped), got %d", app.wsCursor)
+	}
+
+	// Move up
+	app.Update(tea.KeyMsg{Type: tea.KeyUp})
+	if app.wsCursor != 1 {
+		t.Fatalf("expected cursor 1 after up, got %d", app.wsCursor)
+	}
+}
+
+func TestApp_WorkspaceSelector_EnterSetsWorkspaceAndFetchesBoards(t *testing.T) {
+	app := NewApp("http://localhost:8080", "", "", "")
+	app.state = viewWorkspaceSelect
+	app.wsChoices = []model.Workspace{
+		{ID: "ws1", Name: "Team Alpha"},
+		{ID: "ws2", Name: "Team Beta"},
+	}
+	app.wsCursor = 1 // select Team Beta
+
+	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if app.workspace != "ws2" {
+		t.Fatalf("expected workspace 'ws2', got '%s'", app.workspace)
+	}
+	if app.wsName != "Team Beta" {
+		t.Fatalf("expected wsName 'Team Beta', got '%s'", app.wsName)
+	}
+	if cmd == nil {
+		t.Fatal("expected a command to fetch boards")
+	}
+}
+
+func TestApp_PressW_FromListView_FetchesWorkspaces(t *testing.T) {
+	app := NewApp("http://localhost:8080", "tok", "ws1", "b1")
+	app.state = viewList
+	app.width = 120
+	app.height = 40
+	app.initPanes()
+
+	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
+	if cmd == nil {
+		t.Fatal("expected a command to fetch workspaces when pressing 'w'")
+	}
+}
+
+func TestApp_SingleWorkspace_AutoSelectsAndShowsBoardSelector(t *testing.T) {
+	app := NewApp("http://localhost:8080", "", "", "")
+	// Simulate receiving a workspacesMsg with only 1 workspace
+	msg := workspacesMsg{
+		workspaces: []model.Workspace{
+			{ID: "ws1", Name: "Only Workspace"},
+		},
+	}
+	app.Update(msg)
+	// Should auto-select the workspace and NOT show workspace selector
+	if app.workspace != "ws1" {
+		t.Fatalf("expected workspace auto-selected to 'ws1', got '%s'", app.workspace)
+	}
+	if app.wsName != "Only Workspace" {
+		t.Fatalf("expected wsName 'Only Workspace', got '%s'", app.wsName)
+	}
+	// Should NOT be in workspace select state
+	if app.state == viewWorkspaceSelect {
+		t.Fatal("should not show workspace selector when only 1 workspace")
+	}
+}
+
+func TestApp_SingleBoard_AutoSelectsAndGoesToList(t *testing.T) {
+	app := NewApp("http://localhost:8080", "", "ws1", "")
+	app.wsName = "Team Alpha"
+	msg := boardsMsg{
+		boards:    []model.Board{{ID: "b1", Name: "Sprint 1", WorkspaceID: "ws1"}},
+		workspace: "Team Alpha",
+	}
+	_, cmd := app.Update(msg)
+	if app.board != "b1" {
+		t.Fatalf("expected board auto-selected to 'b1', got '%s'", app.board)
+	}
+	if app.boardName != "Sprint 1" {
+		t.Fatalf("expected boardName 'Sprint 1', got '%s'", app.boardName)
+	}
+	if app.state != viewList {
+		t.Fatal("should transition to viewList when only 1 board")
+	}
+	if cmd == nil {
+		t.Fatal("expected a command to fetch tickets")
+	}
+}
+
+func TestApp_BoardSelector_EscGoesBackToWorkspaceSelector(t *testing.T) {
+	app := NewApp("http://localhost:8080", "", "ws1", "")
+	app.state = viewBoardSelect
+	app.boardChoices = []model.Board{
+		{ID: "b1", Name: "Board 1"},
+		{ID: "b2", Name: "Board 2"},
+	}
+
+	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	if cmd == nil {
+		t.Fatal("expected a command to fetch workspaces")
+	}
+	// workspace should be cleared so the full flow restarts
+	if app.workspace != "" {
+		t.Fatalf("expected workspace cleared, got '%s'", app.workspace)
+	}
+}
+
+func TestApp_PressN_FromListView_ReturnsCreateCmd(t *testing.T) {
+	app := NewApp("http://localhost:8080", "tok", "ws1", "b1")
+	app.state = viewList
+	app.width = 120
+	app.height = 40
+	app.initPanes()
+
+	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	if cmd == nil {
+		t.Fatal("expected a command when pressing 'n'")
+	}
+}
+
+func TestApp_TicketCreatedMsg_RefreshesTickets(t *testing.T) {
+	app := NewApp("http://localhost:8080", "tok", "ws1", "b1")
+	app.state = viewList
+
+	_, cmd := app.Update(ticketCreatedMsg{})
+	if cmd == nil {
+		t.Fatal("expected a refresh command after ticket creation")
+	}
+}
+
 func TestApp_AllTickets_StoredForStatusBar(t *testing.T) {
 	app := NewApp("http://localhost:8080", "", "", "")
 	app.width = 120
@@ -96,19 +290,18 @@ func TestApp_AllTickets_StoredForStatusBar(t *testing.T) {
 	}
 }
 
-func TestApp_BoardAutoSelected_SetsStateAndReturnsCmd(t *testing.T) {
+func TestApp_SingleBoardAutoSelected_SetsStateAndReturnsCmd(t *testing.T) {
 	app := NewApp("http://localhost:8080", "tok", "", "")
 	app.width = 120
 	app.height = 40
 	app.initPanes()
 
-	// Simulate receiving a boardAutoSelectedMsg (what fetchBoards should return
-	// when there's a single workspace + single board)
-	msg := boardAutoSelectedMsg{
-		workspace:   "ws1",
-		wsName:      "My Workspace",
-		board:       "b1",
-		boardName:   "My Board",
+	// Simulate receiving a boardsMsg with a single board (auto-selects)
+	msg := boardsMsg{
+		boards: []model.Board{
+			{ID: "b1", Name: "My Board", WorkspaceID: "ws1"},
+		},
+		workspace: "My Workspace",
 	}
 
 	_, cmd := app.Update(msg)

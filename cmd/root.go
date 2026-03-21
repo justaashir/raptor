@@ -35,7 +35,7 @@ var rootCmd = &cobra.Command{
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		name := cmd.Name()
 		// Skip auth + update check for these commands
-		if name == "serve" || name == "version" || name == "update" || name == "login" {
+		if name == "serve" || name == "version" || name == "update" || name == "login" || name == "completion" {
 			return
 		}
 
