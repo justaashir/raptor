@@ -132,11 +132,16 @@ func OverlayOnBackground(content string, boxW, boxH int, bg string, termW, termH
 	return strings.Join(bgLines[:termH], "\n")
 }
 
-// createFormTheme returns a Dracula-based huh theme.
-// Uses the default left-accent bar style (which huh handles correctly for
-// all field types) with Dracula colors.
+// createFormTheme returns a Dracula-based huh theme with field widths fixed.
+//
+// huh has a bug: Input.View() calls styles.Base.Width(i.width).Render(...)
+// but Text.View() calls styles.Base.Render(...) WITHOUT setting Width.
+// To work around this, we bake the form width into both Focused.Base and
+// Blurred.Base so Text fields also render at the correct width.
 func createFormTheme() *huh.Theme {
 	t := huh.ThemeDracula()
+	t.Focused.Base = t.Focused.Base.Width(createFormW)
+	t.Blurred.Base = t.Blurred.Base.Width(createFormW)
 	return t
 }
 
