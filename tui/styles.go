@@ -90,58 +90,31 @@ func OverlayOnBackground(content string, boxW, boxH int, bg string, termW, termH
 		bgLines = append(bgLines, "")
 	}
 
-	// Compute centered position
-	boxRenderedW := lipgloss.Width(box)
+	// Compute centered vertical position
 	boxRenderedH := len(boxLines)
 	startY := (termH - boxRenderedH) / 2
-	startX := (termW - boxRenderedW) / 2
 	if startY < 0 {
 		startY = 0
 	}
+
+	// Center horizontally using lipgloss.Place on each box line
+	boxRenderedW := lipgloss.Width(box)
+	startX := (termW - boxRenderedW) / 2
 	if startX < 0 {
 		startX = 0
 	}
+	pad := strings.Repeat(" ", startX)
 
-	// Overlay box lines onto background
+	// Replace background lines in the overlay region
 	for i, bLine := range boxLines {
 		bgIdx := startY + i
 		if bgIdx >= len(bgLines) {
 			break
 		}
-		bgLine := bgLines[bgIdx]
-		// Pad background line to startX with spaces
-		bgW := lipgloss.Width(bgLine)
-		var left string
-		if bgW >= startX {
-			left = truncateToWidth(bgLine, startX)
-		} else {
-			left = bgLine + strings.Repeat(" ", startX-bgW)
-		}
-		// Right side of background after the box
-		rightStart := startX + lipgloss.Width(bLine)
-		var right string
-		if bgW > rightStart {
-			// We need the tail of the background line
-			// Use a simple approach: pad and slice
-			right = truncateRight(bgLine, rightStart)
-		}
-		bgLines[bgIdx] = left + bLine + right
+		bgLines[bgIdx] = pad + bLine
 	}
 
 	return strings.Join(bgLines[:termH], "\n")
-}
-
-// truncateRight returns the portion of s after skipW display columns.
-func truncateRight(s string, skipW int) string {
-	runes := []rune(s)
-	w := 0
-	for i, r := range runes {
-		w += lipgloss.Width(string(r))
-		if w > skipW {
-			return string(runes[i:])
-		}
-	}
-	return ""
 }
 
 // Pane styles
