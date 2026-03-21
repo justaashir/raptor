@@ -73,6 +73,9 @@ var loginCmd = &cobra.Command{
 
 		fmt.Printf("Logged in as %s. Token saved to ~/.raptor.json\n", result.Username)
 
+		// Install shell completions
+		installCompletion()
+
 		if cfg.Workspace == "" {
 			fmt.Println("\nNext steps:")
 			fmt.Println("  raptor workspace create <name>   — create your first workspace")

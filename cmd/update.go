@@ -70,6 +70,9 @@ var updateCmd = &cobra.Command{
 
 		fmt.Printf("Updated to %s\n", latest)
 
+		// Install shell completions
+		installCompletion()
+
 		// Update Claude Code skill (enforce HTTPS, size limit)
 		skillURL := serverURL + "/api/skill"
 		if strings.HasPrefix(skillURL, "http://") && !strings.Contains(skillURL, "localhost") && !strings.Contains(skillURL, "127.0.0.1") {
