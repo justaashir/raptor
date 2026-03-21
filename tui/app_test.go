@@ -255,6 +255,29 @@ func TestApp_BoardSelector_EscGoesBackToWorkspaceSelector(t *testing.T) {
 	}
 }
 
+func TestApp_PressN_FromListView_ReturnsCreateCmd(t *testing.T) {
+	app := NewApp("http://localhost:8080", "tok", "ws1", "b1")
+	app.state = viewList
+	app.width = 120
+	app.height = 40
+	app.initPanes()
+
+	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	if cmd == nil {
+		t.Fatal("expected a command when pressing 'n'")
+	}
+}
+
+func TestApp_TicketCreatedMsg_RefreshesTickets(t *testing.T) {
+	app := NewApp("http://localhost:8080", "tok", "ws1", "b1")
+	app.state = viewList
+
+	_, cmd := app.Update(ticketCreatedMsg{})
+	if cmd == nil {
+		t.Fatal("expected a refresh command after ticket creation")
+	}
+}
+
 func TestApp_AllTickets_StoredForStatusBar(t *testing.T) {
 	app := NewApp("http://localhost:8080", "", "", "")
 	app.width = 120

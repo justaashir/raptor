@@ -11,6 +11,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"nhooyr.io/websocket"
 )
@@ -21,6 +22,7 @@ const (
 	viewList viewState = iota
 	viewBoardSelect
 	viewWorkspaceSelect
+	viewCreate
 )
 
 type App struct {
@@ -45,6 +47,10 @@ type App struct {
 	// Workspace selector state
 	wsChoices []model.Workspace
 	wsCursor  int
+	// Create form state
+	createForm *huh.Form
+	newTitle   string
+	newContent string
 }
 
 type ticketsMsg []model.Ticket
@@ -57,6 +63,7 @@ type boardsMsg struct {
 type workspacesMsg struct {
 	workspaces []model.Workspace
 }
+type ticketCreatedMsg struct{}
 
 func NewApp(serverURL, token, workspace, board string) *App {
 	return &App{
@@ -129,6 +136,11 @@ func (a *App) Init() tea.Cmd {
 }
 
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Route all messages to create form when active
+	if a.state == viewCreate {
+		return a.updateCreate(msg)
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		a.width = msg.Width
@@ -166,6 +178,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.boardCursor = 0
 		a.state = viewBoardSelect
 		return a, nil
+
+	case ticketCreatedMsg:
+		return a, a.fetchTickets
 
 	case errMsg:
 		a.err = msg
@@ -266,6 +281,9 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.SwitchWorkspace):
 		return a, a.fetchWorkspaces
 
+	case key.Matches(msg, keys.Create):
+		return a, a.startCreateForm()
+
 	default:
 		// Delegate to focused pane — list handles j/k, /, pgup/pgdn
 		if a.focused == focusList {
@@ -284,6 +302,11 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (a *App) View() string {
 	if a.quitting {
 		return ""
+	}
+
+	if a.state == viewCreate {
+		titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("14"))
+		return titleStyle.Render("New ticket") + "\n\n" + a.createForm.View()
 	}
 
 	if a.state == viewWorkspaceSelect {
@@ -386,6 +409,61 @@ func (a *App) fetchTickets() tea.Msg {
 	return ticketsMsg(resp)
 }
 
+func (a *App) startCreateForm() tea.Cmd {
+	a.newTitle = ""
+	a.newContent = ""
+	a.createForm = huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("Title").
+				Value(&a.newTitle),
+			huh.NewText().
+				Title("Content (markdown)").
+				Value(&a.newContent),
+		),
+	).WithWidth(50).WithShowHelp(true).WithShowErrors(true)
+	a.state = viewCreate
+	return a.createForm.Init()
+}
+
+func (a *App) updateCreate(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Check for esc to cancel
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		if key.Matches(keyMsg, keys.Quit) {
+			a.state = viewList
+			return a, nil
+		}
+	}
+
+	form, cmd := a.createForm.Update(msg)
+	if f, ok := form.(*huh.Form); ok {
+		a.createForm = f
+	}
+
+	if a.createForm.State == huh.StateCompleted {
+		a.state = viewList
+		if a.newTitle == "" {
+			return a, nil
+		}
+		return a, a.submitTicket
+	}
+	if a.createForm.State == huh.StateAborted {
+		a.state = viewList
+		return a, nil
+	}
+
+	return a, cmd
+}
+
+func (a *App) submitTicket() tea.Msg {
+	c := client.NewScoped(a.serverURL, a.token, a.workspace, a.board)
+	_, err := c.CreateTicket(a.newTitle, a.newContent, "")
+	if err != nil {
+		return errMsg(err)
+	}
+	return ticketCreatedMsg{}
+}
+
 func (a *App) fetchWorkspaces() tea.Msg {
 	c := client.New(a.serverURL, a.token)
 	workspaces, err := c.ListWorkspaces()
@@ -442,6 +520,7 @@ type keyMap struct {
 	Back        key.Binding
 	SwitchBoard     key.Binding
 	SwitchWorkspace key.Binding
+	Create          key.Binding
 	Tab             key.Binding
 }
 
@@ -454,5 +533,6 @@ var keys = keyMap{
 	Back:        key.NewBinding(key.WithKeys("esc")),
 	SwitchBoard:     key.NewBinding(key.WithKeys("b")),
 	SwitchWorkspace: key.NewBinding(key.WithKeys("w")),
+	Create:          key.NewBinding(key.WithKeys("n")),
 	Tab:             key.NewBinding(key.WithKeys("tab")),
 }
