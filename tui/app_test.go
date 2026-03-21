@@ -485,16 +485,17 @@ func TestApp_Init_LoadsCachedTickets(t *testing.T) {
 func TestWSURL(t *testing.T) {
 	tests := []struct {
 		serverURL string
+		token     string
 		expected  string
 	}{
-		{"http://localhost:8080", "ws://localhost:8080/ws"},
-		{"https://raptor.example.com", "wss://raptor.example.com/ws"},
-		{"http://httpbin.org", "ws://httpbin.org/ws"},
+		{"http://localhost:8080", "tok123", "ws://localhost:8080/ws?token=tok123"},
+		{"https://raptor.example.com", "abc", "wss://raptor.example.com/ws?token=abc"},
+		{"http://httpbin.org", "xyz", "ws://httpbin.org/ws?token=xyz"},
 	}
 	for _, tt := range tests {
-		got := wsURL(tt.serverURL)
+		got := wsURL(tt.serverURL, tt.token)
 		if got != tt.expected {
-			t.Errorf("wsURL(%q) = %q, want %q", tt.serverURL, got, tt.expected)
+			t.Errorf("wsURL(%q, %q) = %q, want %q", tt.serverURL, tt.token, got, tt.expected)
 		}
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
@@ -48,5 +49,32 @@ func TestServer_InstallScript(t *testing.T) {
 	}
 	if !strings.Contains(body, "github.com/justaashir/raptor/releases/latest/download") {
 		t.Fatal("expected GitHub releases download URL")
+	}
+}
+
+func TestServerBaseURL_EnvVar(t *testing.T) {
+	// Set SERVER_BASE_URL env var
+	os.Setenv("SERVER_BASE_URL", "https://custom.example.com")
+	defer os.Unsetenv("SERVER_BASE_URL")
+
+	req := httptest.NewRequest("GET", "/install.sh", nil)
+	req.Host = "other.example.com"
+
+	got := serverBaseURL(req)
+	if got != "https://custom.example.com" {
+		t.Fatalf("expected env var value, got %q", got)
+	}
+}
+
+func TestServerBaseURL_InvalidHost(t *testing.T) {
+	// Ensure env var is not set
+	os.Unsetenv("SERVER_BASE_URL")
+
+	req := httptest.NewRequest("GET", "/install.sh", nil)
+	req.Host = "bad host <script>"
+
+	got := serverBaseURL(req)
+	if got != "https://raptor.raptorthree.com" {
+		t.Fatalf("expected fallback URL for invalid host, got %q", got)
 	}
 }

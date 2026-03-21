@@ -4,13 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"raptor/model"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"golang.org/x/time/rate"
 	"gorm.io/gorm"
 	"nhooyr.io/websocket"
 )
@@ -46,8 +49,23 @@ func NewServer(db *DB, hub *Hub, opts ...Option) *Server {
 		o(s)
 	}
 
+	// Security headers middleware
+	s.Echo.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			c.Response().Header().Set("X-Content-Type-Options", "nosniff")
+			c.Response().Header().Set("X-Frame-Options", "DENY")
+			return next(c)
+		}
+	})
+
 	// Public routes (no auth)
-	s.Echo.POST("/api/auth", s.handleAuth)
+	authLimiter := rate.NewLimiter(rate.Every(time.Second), 5)
+	s.Echo.POST("/api/auth", func(c echo.Context) error {
+		if !authLimiter.Allow() {
+			return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
+		}
+		return s.handleAuth(c)
+	})
 	s.Echo.GET("/api/version", s.handleVersion)
 	s.Echo.GET("/api/skill", s.handleSkill)
 	s.Echo.GET("/install.sh", s.handleInstallScript)
@@ -153,8 +171,19 @@ func (w *wsConn) Send(msg []byte) error {
 }
 
 func (s *Server) handleWS(c echo.Context) error {
+	if s.secret == "" {
+		return c.JSON(http.StatusServiceUnavailable, map[string]string{"error": "server not configured"})
+	}
+	tokenStr := c.QueryParam("token")
+	if tokenStr == "" {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "missing token"})
+	}
+	if _, err := ValidateToken(tokenStr, s.secret); err != nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid token"})
+	}
+
 	ws, err := websocket.Accept(c.Response(), c.Request(), &websocket.AcceptOptions{
-		InsecureSkipVerify: true,
+		OriginPatterns: []string{"*"},
 	})
 	if err != nil {
 		return nil
@@ -195,6 +224,9 @@ func (s *Server) createWorkspace(c echo.Context) error {
 	}
 	if input.Name == "" {
 		return jsonErr(c, http.StatusBadRequest, "name required")
+	}
+	if len(input.Name) > 100 {
+		return jsonErr(c, http.StatusBadRequest, "name too long (max 100 characters)")
 	}
 	id := genID()
 	u := username(c)
@@ -243,6 +275,9 @@ func (s *Server) addWorkspaceMember(c echo.Context) error {
 	if err := c.Bind(&input); err != nil {
 		return jsonErr(c, http.StatusBadRequest, "bad request")
 	}
+	if !validUsername.MatchString(input.Username) || len(input.Username) > 39 {
+		return jsonErr(c, http.StatusBadRequest, "invalid username")
+	}
 	if err := s.db.AddWorkspaceMember(wid, input.Username, "member"); err != nil {
 		if errors.Is(err, ErrAlreadyMember) {
 			return jsonErr(c, http.StatusConflict, "user is already a member of this workspace")
@@ -276,6 +311,15 @@ func (s *Server) removeWorkspaceMember(c echo.Context) error {
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
 	return c.NoContent(http.StatusNoContent)
+}
+
+func validateStatuses(statuses []string) error {
+	for _, st := range statuses {
+		if st == "" || strings.ContainsAny(st, ", ") {
+			return fmt.Errorf("invalid status name: must be non-empty with no commas or spaces")
+		}
+	}
+	return nil
 }
 
 // --- Board handlers ---
@@ -322,13 +366,14 @@ func (s *Server) createBoard(c echo.Context) error {
 	if input.Name == "" {
 		return jsonErr(c, http.StatusBadRequest, "name required")
 	}
+	if len(input.Name) > 100 {
+		return jsonErr(c, http.StatusBadRequest, "name too long (max 100 characters)")
+	}
 	if len(input.Statuses) == 0 {
 		input.Statuses = model.DefaultStatuses
 	}
-	for _, st := range input.Statuses {
-		if st == "" || strings.ContainsAny(st, ", ") {
-			return jsonErr(c, http.StatusBadRequest, "invalid status name: must be non-empty with no commas or spaces")
-		}
+	if err := validateStatuses(input.Statuses); err != nil {
+		return jsonErr(c, http.StatusBadRequest, err.Error())
 	}
 	id := genID()
 	u := username(c)
@@ -363,10 +408,8 @@ func (s *Server) updateBoard(c echo.Context) error {
 		fields["name"] = *input.Name
 	}
 	if len(input.Statuses) > 0 {
-		for _, st := range input.Statuses {
-			if st == "" || strings.ContainsAny(st, ", ") {
-				return jsonErr(c, http.StatusBadRequest, "invalid status name: must be non-empty with no commas or spaces")
-			}
+		if err := validateStatuses(input.Statuses); err != nil {
+			return jsonErr(c, http.StatusBadRequest, err.Error())
 		}
 		fields["statuses"] = strings.Join(input.Statuses, ",")
 	}
@@ -429,21 +472,14 @@ func (s *Server) listTickets(c echo.Context) error {
 	var err error
 	if query != "" {
 		tickets, err = s.db.SearchTickets(bid, query)
+	} else if mine == "true" && u != "" {
+		tickets, err = s.db.ListTicketsMine(bid, u)
 	} else {
 		tickets, err = s.db.ListTickets(bid, status)
 	}
 	if err != nil {
 		log.Printf("ticket list error: %v", err)
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")
-	}
-	if mine == "true" && u != "" {
-		var filtered []model.Ticket
-		for _, t := range tickets {
-			if t.CreatedBy == u || t.Assignee == u {
-				filtered = append(filtered, t)
-			}
-		}
-		tickets = filtered
 	}
 	if tickets == nil {
 		tickets = []model.Ticket{}
@@ -466,6 +502,9 @@ func (s *Server) createTicket(c echo.Context) error {
 	}
 	if err := c.Bind(&input); err != nil {
 		return jsonErr(c, http.StatusBadRequest, "bad request")
+	}
+	if input.Title == "" {
+		return jsonErr(c, http.StatusBadRequest, "title required")
 	}
 	ticket := model.NewTicket(input.Title, input.Content, u)
 	ticket.BoardID = bid

@@ -61,11 +61,14 @@ type App struct {
 	createForm *huh.Form
 	newTitle   string
 	newContent string
+	// WebSocket connection (reused across events)
+	wsConn *websocket.Conn
 }
 
 type ticketsMsg []model.Ticket
 type errMsg error
 type wsMsg struct{}
+type debouncedFetchMsg struct{}
 type boardsMsg struct {
 	boards    []model.Board
 	workspace string
@@ -75,6 +78,13 @@ type workspacesMsg struct {
 }
 type ticketCreatedMsg struct{}
 
+// defaultCachePathOrEmpty returns the cache path, or "" if the home directory
+// cannot be determined. Caching is non-critical, so callers treat "" as disabled.
+func defaultCachePathOrEmpty() string {
+	p, _ := DefaultCachePath()
+	return p
+}
+
 func NewApp(serverURL, token, workspace, board string) *App {
 	return &App{
 		serverURL:  serverURL,
@@ -82,7 +92,7 @@ func NewApp(serverURL, token, workspace, board string) *App {
 		apiClient:  client.NewScoped(serverURL, token, workspace, board),
 		workspace:  workspace,
 		board:      board,
-		cachePath:  DefaultCachePath(),
+		cachePath:  defaultCachePathOrEmpty(),
 		focused:    focusList,
 		listPane:   NewListPane(40, 20),
 		detailPane: NewDetailPane(60, 20),
@@ -93,12 +103,15 @@ func (a *App) refreshClient() {
 	a.apiClient = client.NewScoped(a.serverURL, a.token, a.workspace, a.board)
 }
 
-// wsURL converts an HTTP server URL to a WebSocket URL.
-func wsURL(serverURL string) string {
+// wsURL converts an HTTP server URL to a WebSocket URL with auth token.
+func wsURL(serverURL, token string) string {
+	var base string
 	if strings.HasPrefix(serverURL, "https://") {
-		return "wss://" + strings.TrimPrefix(serverURL, "https://") + "/ws"
+		base = "wss://" + strings.TrimPrefix(serverURL, "https://") + "/ws"
+	} else {
+		base = "ws://" + strings.TrimPrefix(serverURL, "http://") + "/ws"
 	}
-	return "ws://" + strings.TrimPrefix(serverURL, "http://") + "/ws"
+	return base + "?token=" + token
 }
 
 func (a *App) initPanes() {
@@ -185,6 +198,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case wsMsg:
+		// Debounce: coalesce rapid WS events into a single fetch after 200ms
+		return a, tea.Tick(200*time.Millisecond, func(t time.Time) tea.Msg {
+			return debouncedFetchMsg{}
+		})
+
+	case debouncedFetchMsg:
 		return a, tea.Batch(a.fetchTickets, a.listenWS)
 
 	case workspacesMsg:
@@ -570,37 +589,35 @@ func (a *App) listenWS() tea.Msg {
 	maxBackoff := 30 * time.Second
 
 	for {
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		c, _, err := websocket.Dial(ctx, wsURL(a.serverURL), nil)
-		cancel()
-		if err != nil {
-			time.Sleep(backoff)
-			backoff *= 2
-			if backoff > maxBackoff {
-				backoff = maxBackoff
+		// Reuse existing connection if available
+		if a.wsConn == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			c, _, err := websocket.Dial(ctx, wsURL(a.serverURL, a.token), nil)
+			cancel()
+			if err != nil {
+				time.Sleep(backoff)
+				backoff = min(backoff*2, maxBackoff)
+				continue
 			}
+			a.wsConn = c
+			backoff = time.Second
+		}
+
+		// Read next message from persistent connection
+		_, data, err := a.wsConn.Read(context.Background())
+		if err != nil {
+			a.wsConn.Close(websocket.StatusGoingAway, "reconnecting")
+			a.wsConn = nil
+			time.Sleep(backoff)
+			backoff = min(backoff*2, maxBackoff)
 			continue
 		}
 
-		// Reset backoff on successful connection
-		backoff = time.Second
-
-		// Read with a long-lived context
-		for {
-			_, data, err := c.Read(context.Background())
-			if err != nil {
-				c.Close(websocket.StatusGoingAway, "reconnecting")
-				break // reconnect
-			}
-			var ev map[string]string
-			json.Unmarshal(data, &ev)
-			if ev["event"] == "ticket_changed" {
-				return wsMsg{}
-			}
+		var ev map[string]string
+		json.Unmarshal(data, &ev)
+		if ev["event"] == "ticket_changed" {
+			return wsMsg{}
 		}
-
-		// Connection dropped — retry after backoff
-		time.Sleep(backoff)
 	}
 }
 

@@ -162,12 +162,4 @@ var (
 				Bold(true).
 				Padding(0, 1)
 
-	DetailTitleStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(colorPink)
-
-	DetailMetaKeyStyle = lipgloss.NewStyle().
-				Foreground(colorPurple).
-				Bold(true)
-
 )

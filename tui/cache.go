@@ -13,9 +13,12 @@ type ticketCache struct {
 }
 
 // DefaultCachePath returns the default path for the ticket cache file.
-func DefaultCachePath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".raptor-cache.json")
+func DefaultCachePath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".raptor-cache.json"), nil
 }
 
 // SaveTicketCache writes tickets to the cache file for the given board.

@@ -26,7 +26,7 @@ var loginCmd = &cobra.Command{
 
 		// Request token from server
 		body, _ := json.Marshal(map[string]string{"username": username})
-		resp, err := http.Post(serverURL+"/api/auth", "application/json", bytes.NewReader(body))
+		resp, err := httpClient.Post(serverURL+"/api/auth", "application/json", bytes.NewReader(body))
 		if err != nil {
 			return fmt.Errorf("server unreachable: %w", err)
 		}

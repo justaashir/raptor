@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"raptor/model"
 	"regexp"
 
 	"github.com/labstack/echo/v4"
@@ -14,8 +15,6 @@ import (
 var skillFS embed.FS
 
 var CurrentVersion = "dev"
-
-const githubRepo = "justaashir/raptor"
 
 func (s *Server) handleVersion(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"version": CurrentVersion})
@@ -30,7 +29,7 @@ func (s *Server) handleSkill(c echo.Context) error {
 }
 
 func (s *Server) handleInstallScript(c echo.Context) error {
-	ghURL := fmt.Sprintf("https://github.com/%s/releases/latest/download", githubRepo)
+	ghURL := fmt.Sprintf("https://github.com/%s/releases/latest/download", model.GitHubRepo)
 
 	script := fmt.Sprintf(`#!/bin/sh
 set -e

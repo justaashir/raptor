@@ -62,7 +62,7 @@ func NewDB(dsn string) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxOpenConns(4)
 
 	return &DB{conn: conn}, nil
 }
@@ -132,22 +132,18 @@ func (db *DB) RemoveWorkspaceMember(workspaceID, username string) error {
 
 func (db *DB) DeleteWorkspace(id string) error {
 	return db.conn.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("workspace_id = ?", id).Delete(&model.WorkspaceMember{}).Error; err != nil {
+		if err := tx.Where("board_id IN (?)",
+			tx.Model(&model.Board{}).Select("id").Where("workspace_id = ?", id),
+		).Delete(&model.Ticket{}).Error; err != nil {
 			return err
-		}
-		var boards []model.Board
-		if err := tx.Where("workspace_id = ?", id).Find(&boards).Error; err != nil {
-			return err
-		}
-		for _, b := range boards {
-			if err := tx.Where("board_id = ?", b.ID).Delete(&model.Ticket{}).Error; err != nil {
-				return err
-			}
 		}
 		if err := tx.Where("workspace_id = ?", id).Delete(&model.Board{}).Error; err != nil {
 			return err
 		}
-		return tx.Delete(&model.Workspace{}, "id = ?", id).Error
+		if err := tx.Where("workspace_id = ?", id).Delete(&model.WorkspaceMember{}).Error; err != nil {
+			return err
+		}
+		return tx.Where("id = ?", id).Delete(&model.Workspace{}).Error
 	})
 }
 
@@ -278,4 +274,11 @@ func (db *DB) GetTicket(id string) (model.Ticket, error) {
 	var t model.Ticket
 	err := db.conn.First(&t, "id = ?", id).Error
 	return t, err
+}
+
+func (d *DB) ListTicketsMine(boardID, username string) ([]model.Ticket, error) {
+	var tickets []model.Ticket
+	err := d.conn.Where("board_id = ? AND (created_by = ? OR assignee = ?)", boardID, username, username).
+		Order("created_at desc").Find(&tickets).Error
+	return tickets, err
 }
