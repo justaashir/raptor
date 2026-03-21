@@ -106,15 +106,14 @@ func username(c echo.Context) string {
 func (s *Server) authorize(c echo.Context, workspaceID, minRole string) error {
 	u := username(c)
 	if u == "" {
-		return errors.New("unauthorized")
+		return errors.New("forbidden")
 	}
 	role, err := s.db.GetMemberRole(workspaceID, u)
 	if err != nil {
-		return errors.New("not a workspace member")
+		return errors.New("forbidden")
 	}
-
 	if roleLevels[role] < roleLevels[minRole] {
-		return errors.New("insufficient permissions")
+		return errors.New("forbidden")
 	}
 	return nil
 }

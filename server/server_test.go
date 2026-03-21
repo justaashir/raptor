@@ -923,3 +923,40 @@ func TestServer_UpdateBoard_RejectsInvalidStatuses(t *testing.T) {
 		})
 	}
 }
+
+func TestServer_NoSecret_RejectsAuthenticatedRoutes(t *testing.T) {
+	srv := newTestServer(t)
+
+	req := httptest.NewRequest("GET", "/api/workspaces/", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code == http.StatusOK {
+		t.Fatal("expected auth rejection when no secret is configured, but got 200")
+	}
+}
+
+func TestServer_Auth_RejectsInvalidUsername(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{})
+
+	tests := []struct {
+		name     string
+		username string
+	}{
+		{"too long", strings.Repeat("a", 40)},
+		{"has spaces", "user name"},
+		{"has special chars", "user<script>"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := fmt.Sprintf(`{"username":"%s"}`, tt.username)
+			req := httptest.NewRequest("POST", "/api/auth", strings.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			srv.ServeHTTP(w, req)
+			if w.Code != http.StatusBadRequest {
+				t.Errorf("expected 400 for username %q, got %d", tt.username, w.Code)
+			}
+		})
+	}
+}
