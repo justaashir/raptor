@@ -1,5 +1,7 @@
 package server
 
+import "log"
+
 type Conn interface {
 	Send(msg []byte) error
 }
@@ -67,6 +69,7 @@ func (h *Hub) Run() {
 				case cl.send <- msg.data:
 				default:
 					// Client channel full — drop slow client.
+					log.Printf("hub: dropping slow client (channel full)")
 					close(cl.send)
 					delete(h.clients, conn)
 				}

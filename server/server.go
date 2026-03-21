@@ -209,6 +209,9 @@ func (s *Server) handleWS(c echo.Context) error {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid token"})
 	}
 
+	// OriginPatterns: ["*"] is intentional — the WS endpoint is auth-gated via
+	// JWT token in the query string, so origin checking is redundant. Tightening
+	// to specific origins would break CLI clients connecting from arbitrary hosts.
 	ws, err := websocket.Accept(c.Response(), c.Request(), &websocket.AcceptOptions{
 		OriginPatterns: []string{"*"},
 	})
