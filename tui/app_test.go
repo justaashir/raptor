@@ -159,6 +159,27 @@ func TestApp_WorkspaceSelector_NavigatesUpDown(t *testing.T) {
 	}
 }
 
+func TestApp_WorkspaceSelector_EnterSetsWorkspaceAndFetchesBoards(t *testing.T) {
+	app := NewApp("http://localhost:8080", "", "", "")
+	app.state = viewWorkspaceSelect
+	app.wsChoices = []model.Workspace{
+		{ID: "ws1", Name: "Team Alpha"},
+		{ID: "ws2", Name: "Team Beta"},
+	}
+	app.wsCursor = 1 // select Team Beta
+
+	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if app.workspace != "ws2" {
+		t.Fatalf("expected workspace 'ws2', got '%s'", app.workspace)
+	}
+	if app.wsName != "Team Beta" {
+		t.Fatalf("expected wsName 'Team Beta', got '%s'", app.wsName)
+	}
+	if cmd == nil {
+		t.Fatal("expected a command to fetch boards")
+	}
+}
+
 func TestApp_AllTickets_StoredForStatusBar(t *testing.T) {
 	app := NewApp("http://localhost:8080", "", "", "")
 	app.width = 120

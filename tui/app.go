@@ -180,6 +180,13 @@ func (a *App) updateWorkspaceSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if a.wsCursor < len(a.wsChoices)-1 {
 			a.wsCursor++
 		}
+	case key.Matches(msg, keys.Enter):
+		if len(a.wsChoices) > 0 {
+			selected := a.wsChoices[a.wsCursor]
+			a.workspace = selected.ID
+			a.wsName = selected.Name
+			return a, a.fetchBoardsForWorkspace
+		}
 	}
 	return a, nil
 }
@@ -392,6 +399,15 @@ func (a *App) fetchBoards() tea.Msg {
 	}
 
 	return boardsMsg{boards: boards, workspace: ws.Name}
+}
+
+func (a *App) fetchBoardsForWorkspace() tea.Msg {
+	c := client.New(a.serverURL, a.token)
+	boards, err := c.ListBoards(a.workspace)
+	if err != nil {
+		return errMsg(err)
+	}
+	return boardsMsg{boards: boards, workspace: a.wsName}
 }
 
 func (a *App) listenWS() tea.Msg {
