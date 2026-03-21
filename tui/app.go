@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"raptor/client"
 	"raptor/model"
 	"strings"
@@ -13,8 +14,19 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/log"
 	"nhooyr.io/websocket"
 )
+
+var logger *log.Logger
+
+func init() {
+	f, _ := os.OpenFile("/tmp/raptor.log", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	logger = log.NewWithOptions(f, log.Options{
+		ReportTimestamp: true,
+		Prefix:          "tui",
+	})
+}
 
 // Create modal dimensions.
 const (
@@ -404,8 +416,7 @@ func (a *App) View() string {
 	bg := lipgloss.JoinVertical(lipgloss.Left, header, panes, statusBar)
 
 	if a.state == viewCreate {
-		contentW := createFormW
-		titleStyle := lipgloss.NewStyle().Bold(true).Foreground(colorCyan).Width(contentW)
+		titleStyle := lipgloss.NewStyle().Bold(true).Foreground(colorCyan)
 		keyStyle := lipgloss.NewStyle().Foreground(colorPurple).Bold(true)
 		helpStyle := lipgloss.NewStyle().Foreground(colorComment)
 		helpLine := keyStyle.Render("enter") + helpStyle.Render(" submit  ") +
@@ -413,15 +424,12 @@ func (a *App) View() string {
 			keyStyle.Render("q") + helpStyle.Render(" cancel")
 
 		title := titleStyle.Render("New ticket")
-		// Force form output to exact content width
-		formView := lipgloss.NewStyle().Width(contentW).Render(a.createForm.View())
-		// Use a fixed-height block for form area so help line sits at bottom
-		// Box height minus padding (top+bottom=2), title (1), gap (1), help (1) = 5 lines of chrome
+		formView := a.createForm.View()
+		// Fixed-height form area so help line sits at the bottom
 		formAreaH := createBoxH - 5
-		formArea := lipgloss.NewStyle().Width(contentW).Height(formAreaH).Render(formView)
-		helpArea := lipgloss.NewStyle().Width(contentW).Render(helpLine)
+		formArea := lipgloss.NewStyle().Height(formAreaH).Render(formView)
 
-		formContent := title + "\n\n" + formArea + "\n" + helpArea
+		formContent := title + "\n\n" + formArea + "\n" + helpLine
 		return OverlayOnBackground(formContent, createBoxW, createBoxH, bg, a.width, a.height)
 	}
 
