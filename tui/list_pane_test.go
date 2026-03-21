@@ -4,6 +4,8 @@ import (
 	"raptor/model"
 	"testing"
 	"time"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 func TestFormatStatus_Todo(t *testing.T) {
@@ -170,5 +172,28 @@ func TestListPane_Filtering(t *testing.T) {
 	// Initially not filtering
 	if lp.Filtering() {
 		t.Fatal("should not be filtering initially")
+	}
+}
+
+func TestTruncateToWidth(t *testing.T) {
+	cases := []struct {
+		input string
+		width int
+		fits  bool
+	}{
+		{"hello", 10, true},
+		{"hello world this is long", 10, false},
+		{"", 5, true},
+		{"hi", 0, false},
+	}
+	for _, tc := range cases {
+		result := truncateToWidth(tc.input, tc.width)
+		w := lipgloss.Width(result)
+		if tc.fits && result != tc.input {
+			t.Errorf("expected %q unchanged at width %d, got %q", tc.input, tc.width, result)
+		}
+		if !tc.fits && w > tc.width {
+			t.Errorf("truncateToWidth(%q, %d) width=%d exceeds max", tc.input, tc.width, w)
+		}
 	}
 }

@@ -77,7 +77,10 @@ func (s *Server) handleAuth(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid username"})
 	}
 
-	isMember, _ := s.db.IsWorkspaceMember(input.Username)
+	isMember, err := s.db.IsWorkspaceMember(input.Username)
+	if err != nil {
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
+	}
 	if !isMember {
 		allowed := false
 		for _, u := range s.allowedUsers {

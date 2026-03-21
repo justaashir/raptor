@@ -21,13 +21,13 @@ var editCmd = &cobra.Command{
 			return err
 		}
 		fields := map[string]any{}
-		if editTitle != "" {
+		if cmd.Flags().Changed("title") {
 			fields["title"] = editTitle
 		}
-		if editContent != "" {
+		if cmd.Flags().Changed("content") {
 			fields["content"] = editContent
 		}
-		if editAssign != "" {
+		if cmd.Flags().Changed("assign") {
 			fields["assignee"] = editAssign
 		}
 		if len(fields) == 0 {

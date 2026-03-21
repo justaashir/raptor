@@ -6,13 +6,12 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"raptor/model"
 	"runtime"
 	"strings"
 
 	"github.com/spf13/cobra"
 )
-
-const githubRepo = "justaashir/raptor"
 
 var updateCmd = &cobra.Command{
 	Use:   "update",
@@ -33,8 +32,8 @@ var updateCmd = &cobra.Command{
 
 		// Download binary from GitHub release
 		assetName := fmt.Sprintf("raptor-%s-%s", runtime.GOOS, runtime.GOARCH)
-		dlURL := fmt.Sprintf("https://github.com/%s/releases/latest/download/%s", githubRepo, assetName)
-		dlResp, err := http.Get(dlURL)
+		dlURL := fmt.Sprintf("https://github.com/%s/releases/latest/download/%s", model.GitHubRepo, assetName)
+		dlResp, err := httpClient.Get(dlURL)
 		if err != nil {
 			return fmt.Errorf("failed to download: %w", err)
 		}
@@ -79,7 +78,7 @@ var updateCmd = &cobra.Command{
 		if strings.HasPrefix(skillURL, "http://") && !strings.Contains(skillURL, "localhost") && !strings.Contains(skillURL, "127.0.0.1") {
 			fmt.Println("Skipping skill update: server is not HTTPS")
 		} else {
-			skillResp, err := http.Get(skillURL)
+			skillResp, err := httpClient.Get(skillURL)
 			if err == nil && skillResp.StatusCode == http.StatusOK {
 				defer skillResp.Body.Close()
 				const maxSkillSize = 64 * 1024 // 64KB

@@ -168,6 +168,32 @@ func TestHandleAuth_EmptyUsername(t *testing.T) {
 	}
 }
 
+func TestServer_Auth_OpenRegistration(t *testing.T) {
+	// Create server with empty allowlist and empty DB
+	srv := newTestServerWithAuth(t, "secret", []string{})
+
+	// POST /api/auth with any username — should succeed (open registration
+	// when no users exist and allowlist is empty)
+	body := `{"username":"newuser"}`
+	req := httptest.NewRequest("POST", "/api/auth", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for open registration, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]string
+	json.NewDecoder(w.Body).Decode(&resp)
+	if resp["token"] == "" {
+		t.Fatal("expected token in response")
+	}
+	if resp["username"] != "newuser" {
+		t.Fatalf("expected username newuser, got %s", resp["username"])
+	}
+}
+
 // helpers
 
 func newTestServerWithAuth(t *testing.T, secret string, users []string) *Server {

@@ -469,8 +469,8 @@ func TestDB_PragmaSettings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sqlDB.Stats().MaxOpenConnections != 1 {
-		t.Errorf("expected MaxOpenConnections=1, got %d", sqlDB.Stats().MaxOpenConnections)
+	if sqlDB.Stats().MaxOpenConnections != 4 {
+		t.Errorf("expected MaxOpenConnections=4, got %d", sqlDB.Stats().MaxOpenConnections)
 	}
 }
 
@@ -489,5 +489,41 @@ func TestDB_AssigneeField(t *testing.T) {
 	}
 	if got.CreatedBy != "alice" {
 		t.Fatalf("expected created_by %q, got %q", "alice", got.CreatedBy)
+	}
+}
+
+func TestDB_ListTicketsMine(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateWorkspace("ws1", "WS", "alice")
+	db.CreateBoard("b1", "ws1", "Board", "alice", model.DefaultStatuses)
+	db.CreateTicket(model.Ticket{ID: "t1", BoardID: "b1", Title: "Alice's", CreatedBy: "alice"})
+	db.CreateTicket(model.Ticket{ID: "t2", BoardID: "b1", Title: "Bob's", CreatedBy: "bob"})
+	db.CreateTicket(model.Ticket{ID: "t3", BoardID: "b1", Title: "Assigned", CreatedBy: "bob", Assignee: "alice"})
+
+	tickets, err := db.ListTicketsMine("b1", "alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tickets) != 2 {
+		t.Errorf("expected 2 tickets for alice, got %d", len(tickets))
+	}
+}
+
+func TestDB_DeleteWorkspace_CascadesAll(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateWorkspace("ws1", "WS", "alice")
+	db.CreateBoard("b1", "ws1", "Board1", "alice", model.DefaultStatuses)
+	db.CreateBoard("b2", "ws1", "Board2", "alice", model.DefaultStatuses)
+	db.CreateTicket(model.Ticket{ID: "t1", BoardID: "b1", Title: "T1"})
+	db.CreateTicket(model.Ticket{ID: "t2", BoardID: "b2", Title: "T2"})
+
+	err := db.DeleteWorkspace("ws1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var count int64
+	db.conn.Model(&model.Ticket{}).Where("board_id IN ?", []string{"b1", "b2"}).Count(&count)
+	if count != 0 {
+		t.Errorf("expected 0 tickets after cascade delete, got %d", count)
 	}
 }

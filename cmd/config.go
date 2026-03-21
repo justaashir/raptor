@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -14,13 +15,20 @@ type Config struct {
 	Board     string `json:"board,omitempty"`
 }
 
-func configPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".raptor.json")
+func configPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("cannot determine home directory: %w", err)
+	}
+	return filepath.Join(home, ".raptor.json"), nil
 }
 
 func LoadConfig() (Config, error) {
-	data, err := os.ReadFile(configPath())
+	path, err := configPath()
+	if err != nil {
+		return Config{}, err
+	}
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return Config{}, err
 	}
@@ -30,9 +38,13 @@ func LoadConfig() (Config, error) {
 }
 
 func SaveConfig(cfg Config) error {
+	path, err := configPath()
+	if err != nil {
+		return err
+	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(configPath(), data, 0600)
+	return os.WriteFile(path, data, 0600)
 }

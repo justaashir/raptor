@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // FormatStatus returns an abbreviated status string for display.
@@ -137,19 +138,10 @@ func (d ticketDelegate) Render(w io.Writer, m list.Model, index int, listItem li
 
 // truncateToWidth cuts s to fit within maxW display columns.
 func truncateToWidth(s string, maxW int) string {
-	w := lipgloss.Width(s)
-	if w <= maxW {
-		return s
+	if maxW <= 0 {
+		return ""
 	}
-	// Remove runes from the end until it fits
-	runes := []rune(s)
-	for len(runes) > 0 {
-		runes = runes[:len(runes)-1]
-		if lipgloss.Width(string(runes)) <= maxW {
-			return string(runes)
-		}
-	}
-	return ""
+	return ansi.Truncate(s, maxW, "")
 }
 
 // padRight pads s with spaces to exactly `width` display columns,

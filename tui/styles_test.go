@@ -88,6 +88,22 @@ func TestOverlay_NoAnsiArtifacts(t *testing.T) {
 	}
 }
 
+func TestStatusStar(t *testing.T) {
+	// Done status should return spaces (no star)
+	got := StatusStar(model.Done)
+	if got != "  " {
+		t.Errorf("StatusStar(Done) = %q, want %q", got, "  ")
+	}
+
+	// Other statuses should return star
+	for _, s := range []model.Status{model.Todo, model.InProgress, model.Status("review")} {
+		got := StatusStar(s)
+		if got != "⭐" {
+			t.Errorf("StatusStar(%s) = %q, want %q", s, got, "⭐")
+		}
+	}
+}
+
 func TestStatusIcon_ReturnsCorrectIcons(t *testing.T) {
 	tests := []struct {
 		status model.Status

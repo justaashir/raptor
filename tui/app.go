@@ -61,11 +61,14 @@ type App struct {
 	createForm *huh.Form
 	newTitle   string
 	newContent string
+	// Debounce generation counter for WS events
+	wsDebounceGen uint64
 }
 
 type ticketsMsg []model.Ticket
 type errMsg error
 type wsMsg struct{}
+type debouncedFetchMsg struct{ gen uint64 }
 type boardsMsg struct {
 	boards    []model.Board
 	workspace string
@@ -75,6 +78,13 @@ type workspacesMsg struct {
 }
 type ticketCreatedMsg struct{}
 
+// defaultCachePathOrEmpty returns the cache path, or "" if the home directory
+// cannot be determined. Caching is non-critical, so callers treat "" as disabled.
+func defaultCachePathOrEmpty() string {
+	p, _ := DefaultCachePath()
+	return p
+}
+
 func NewApp(serverURL, token, workspace, board string) *App {
 	return &App{
 		serverURL:  serverURL,
@@ -82,7 +92,7 @@ func NewApp(serverURL, token, workspace, board string) *App {
 		apiClient:  client.NewScoped(serverURL, token, workspace, board),
 		workspace:  workspace,
 		board:      board,
-		cachePath:  DefaultCachePath(),
+		cachePath:  defaultCachePathOrEmpty(),
 		focused:    focusList,
 		listPane:   NewListPane(40, 20),
 		detailPane: NewDetailPane(60, 20),
@@ -93,12 +103,15 @@ func (a *App) refreshClient() {
 	a.apiClient = client.NewScoped(a.serverURL, a.token, a.workspace, a.board)
 }
 
-// wsURL converts an HTTP server URL to a WebSocket URL.
-func wsURL(serverURL string) string {
+// wsURL converts an HTTP server URL to a WebSocket URL with auth token.
+func wsURL(serverURL, token string) string {
+	var base string
 	if strings.HasPrefix(serverURL, "https://") {
-		return "wss://" + strings.TrimPrefix(serverURL, "https://") + "/ws"
+		base = "wss://" + strings.TrimPrefix(serverURL, "https://") + "/ws"
+	} else {
+		base = "ws://" + strings.TrimPrefix(serverURL, "http://") + "/ws"
 	}
-	return "ws://" + strings.TrimPrefix(serverURL, "http://") + "/ws"
+	return base + "?token=" + token
 }
 
 func (a *App) initPanes() {
@@ -185,7 +198,18 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case wsMsg:
-		return a, tea.Batch(a.fetchTickets, a.listenWS)
+		// Debounce: coalesce rapid WS events into a single fetch after 200ms
+		a.wsDebounceGen++
+		gen := a.wsDebounceGen
+		return a, tea.Tick(200*time.Millisecond, func(t time.Time) tea.Msg {
+			return debouncedFetchMsg{gen: gen}
+		})
+
+	case debouncedFetchMsg:
+		if msg.gen != a.wsDebounceGen {
+			return a, nil // stale timer, ignore
+		}
+		return a, a.fetchTickets
 
 	case workspacesMsg:
 		if len(msg.workspaces) == 1 {
@@ -568,39 +592,36 @@ func (a *App) fetchBoardsForWorkspace() tea.Msg {
 func (a *App) listenWS() tea.Msg {
 	backoff := time.Second
 	maxBackoff := 30 * time.Second
+	var conn *websocket.Conn
 
 	for {
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		c, _, err := websocket.Dial(ctx, wsURL(a.serverURL), nil)
-		cancel()
-		if err != nil {
-			time.Sleep(backoff)
-			backoff *= 2
-			if backoff > maxBackoff {
-				backoff = maxBackoff
+		if conn == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			c, _, err := websocket.Dial(ctx, wsURL(a.serverURL, a.token), nil)
+			cancel()
+			if err != nil {
+				time.Sleep(backoff)
+				backoff = min(backoff*2, maxBackoff)
+				continue
 			}
+			conn = c
+			backoff = time.Second
+		}
+
+		_, data, err := conn.Read(context.Background())
+		if err != nil {
+			conn.Close(websocket.StatusGoingAway, "reconnecting")
+			conn = nil
+			time.Sleep(backoff)
+			backoff = min(backoff*2, maxBackoff)
 			continue
 		}
 
-		// Reset backoff on successful connection
-		backoff = time.Second
-
-		// Read with a long-lived context
-		for {
-			_, data, err := c.Read(context.Background())
-			if err != nil {
-				c.Close(websocket.StatusGoingAway, "reconnecting")
-				break // reconnect
-			}
-			var ev map[string]string
-			json.Unmarshal(data, &ev)
-			if ev["event"] == "ticket_changed" {
-				return wsMsg{}
-			}
+		var ev map[string]string
+		json.Unmarshal(data, &ev)
+		if ev["event"] == "ticket_changed" {
+			return wsMsg{}
 		}
-
-		// Connection dropped — retry after backoff
-		time.Sleep(backoff)
 	}
 }
 

@@ -1,5 +1,7 @@
 package server
 
+import "log"
+
 type Conn interface {
 	Send(msg []byte) error
 }
@@ -9,12 +11,25 @@ type broadcastMsg struct {
 	done chan struct{}
 }
 
+type client struct {
+	conn Conn
+	send chan []byte
+}
+
+func (cl *client) writePump() {
+	for msg := range cl.send {
+		if err := cl.conn.Send(msg); err != nil {
+			return
+		}
+	}
+}
+
 type Hub struct {
 	register   chan Conn
 	unregister chan Conn
 	broadcast  chan broadcastMsg
 	stop       chan struct{}
-	clients    map[Conn]bool
+	clients    map[Conn]*client
 }
 
 func NewHub() *Hub {
@@ -23,7 +38,7 @@ func NewHub() *Hub {
 		unregister: make(chan Conn),
 		broadcast:  make(chan broadcastMsg),
 		stop:       make(chan struct{}),
-		clients:    make(map[Conn]bool),
+		clients:    make(map[Conn]*client),
 	}
 }
 
@@ -31,15 +46,32 @@ func (h *Hub) Run() {
 	for {
 		select {
 		case <-h.stop:
+			for conn, cl := range h.clients {
+				close(cl.send)
+				delete(h.clients, conn)
+			}
 			return
 		case c := <-h.register:
-			h.clients[c] = true
+			cl := &client{
+				conn: c,
+				send: make(chan []byte, 16),
+			}
+			h.clients[c] = cl
+			go cl.writePump()
 		case c := <-h.unregister:
-			delete(h.clients, c)
+			if cl, ok := h.clients[c]; ok {
+				close(cl.send)
+				delete(h.clients, c)
+			}
 		case msg := <-h.broadcast:
-			for c := range h.clients {
-				if err := c.Send(msg.data); err != nil {
-					delete(h.clients, c)
+			for conn, cl := range h.clients {
+				select {
+				case cl.send <- msg.data:
+				default:
+					// Client channel full — drop slow client.
+					log.Printf("hub: dropping slow client (channel full)")
+					close(cl.send)
+					delete(h.clients, conn)
 				}
 			}
 			if msg.done != nil {

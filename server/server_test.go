@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -8,6 +9,9 @@ import (
 	"raptor/model"
 	"strings"
 	"testing"
+	"time"
+
+	"nhooyr.io/websocket"
 )
 
 func mustToken(t *testing.T, username, secret string) string {
@@ -958,5 +962,257 @@ func TestServer_Auth_RejectsInvalidUsername(t *testing.T) {
 				t.Errorf("expected 400 for username %q, got %d", tt.username, w.Code)
 			}
 		})
+	}
+}
+
+func TestServer_WebSocket_RequiresAuth(t *testing.T) {
+	srv := newTestServerWithAuth(t, "testsecret", []string{"alice"})
+	ts := httptest.NewServer(srv.Echo)
+	defer ts.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws"
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	_, _, err := websocket.Dial(ctx, wsURL, nil)
+	if err == nil {
+		t.Fatal("expected WS without token to be rejected")
+	}
+}
+
+func TestServer_WebSocket_AcceptsAuth(t *testing.T) {
+	srv := newTestServerWithAuth(t, "testsecret", []string{"alice"})
+	ts := httptest.NewServer(srv.Echo)
+	defer ts.Close()
+
+	token := mustToken(t, "alice", "testsecret")
+	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws?token=" + token
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	conn, _, err := websocket.Dial(ctx, wsURL, nil)
+	if err != nil {
+		t.Fatalf("expected WS with valid token to succeed, got: %v", err)
+	}
+	conn.Close(websocket.StatusNormalClosure, "done")
+}
+
+func TestServer_SecurityHeaders(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
+
+	req := httptest.NewRequest("GET", "/api/version", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if got := w.Header().Get("X-Content-Type-Options"); got != "nosniff" {
+		t.Errorf("X-Content-Type-Options = %q, want %q", got, "nosniff")
+	}
+	if got := w.Header().Get("X-Frame-Options"); got != "DENY" {
+		t.Errorf("X-Frame-Options = %q, want %q", got, "DENY")
+	}
+}
+
+func TestServer_Auth_RateLimited(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
+
+	got429 := false
+	for i := 0; i < 20; i++ {
+		body := `{"username":"alice"}`
+		req := httptest.NewRequest("POST", "/api/auth", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, req)
+		if w.Code == http.StatusTooManyRequests {
+			got429 = true
+			break
+		}
+	}
+	if !got429 {
+		t.Fatal("expected at least one 429 response after 20 rapid auth requests")
+	}
+}
+
+func TestServer_Auth_RateLimitPerIP(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret123", []string{"alice", "bob"})
+
+	// Exhaust limit from IP1
+	for i := 0; i < 6; i++ {
+		req := httptest.NewRequest("POST", "/api/auth", strings.NewReader(`{"username":"alice"}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.RemoteAddr = "1.2.3.4:1234"
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, req)
+	}
+
+	// IP2 should still work
+	req := httptest.NewRequest("POST", "/api/auth", strings.NewReader(`{"username":"bob"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "5.6.7.8:5678"
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code == http.StatusTooManyRequests {
+		t.Fatal("IP2 should not be rate limited when IP1 is exhausted")
+	}
+}
+
+func TestServer_CreateTicket_RejectsEmptyTitle(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
+	token := mustToken(t, "alice", "secret")
+	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
+
+	body := `{"title":""}`
+	req := httptest.NewRequest("POST", ticketURL(wsID, bdID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for empty title, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestServer_InviteMember_ValidatesUsername(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
+	token := mustToken(t, "alice", "secret")
+
+	body := `{"name":"Team"}`
+	req := httptest.NewRequest("POST", "/api/workspaces/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	var ws struct{ ID string `json:"id"` }
+	json.NewDecoder(w.Body).Decode(&ws)
+
+	body = `{"username":"bad user!!"}`
+	req = httptest.NewRequest("POST", "/api/workspaces/"+ws.ID+"/members", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid username, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestServer_WebSocket_ReceivesBroadcast(t *testing.T) {
+	srv := newTestServerWithAuth(t, "testsecret", []string{"alice"})
+	ts := httptest.NewServer(srv.Echo)
+	defer ts.Close()
+
+	token := mustToken(t, "alice", "testsecret")
+
+	// Connect WebSocket with valid token
+	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws?token=" + token
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	conn, _, err := websocket.Dial(ctx, wsURL, nil)
+	if err != nil {
+		t.Fatalf("WS dial failed: %v", err)
+	}
+	defer conn.Close(websocket.StatusNormalClosure, "done")
+
+	// Give the hub a moment to register the client
+	time.Sleep(50 * time.Millisecond)
+
+	// Set up workspace + board via the HTTP server URL
+	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
+
+	// Create a ticket via API (triggers broadcast)
+	body := `{"title":"WS test ticket"}`
+	req := httptest.NewRequest("POST", ticketURL(wsID, bdID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Read from WebSocket, verify ticket_changed event received
+	readCtx, readCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer readCancel()
+	_, msg, err := conn.Read(readCtx)
+	if err != nil {
+		t.Fatalf("WS read failed: %v", err)
+	}
+
+	var event struct {
+		Event string `json:"event"`
+	}
+	if err := json.Unmarshal(msg, &event); err != nil {
+		t.Fatalf("failed to unmarshal WS message: %v", err)
+	}
+	if event.Event != "ticket_changed" {
+		t.Fatalf("expected event 'ticket_changed', got %q", event.Event)
+	}
+}
+
+func TestServer_DeleteBoard(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
+	token := mustToken(t, "alice", "secret")
+	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
+
+	// DELETE the board
+	req := httptest.NewRequest("DELETE", "/api/workspaces/"+wsID+"/boards/"+bdID, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// GET the board, verify 404
+	req = httptest.NewRequest("GET", "/api/workspaces/"+wsID+"/boards/"+bdID, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 after delete, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestServer_RemoveLastOwner_Rejected(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
+	token := mustToken(t, "alice", "secret")
+
+	// Create workspace (alice is auto-added as owner)
+	body := `{"name":"Team"}`
+	req := httptest.NewRequest("POST", "/api/workspaces/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+	var ws struct{ ID string `json:"id"` }
+	json.NewDecoder(w.Body).Decode(&ws)
+
+	// Try to remove alice (the last owner) — should be rejected
+	req = httptest.NewRequest("DELETE", "/api/workspaces/"+ws.ID+"/members/alice", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for removing last owner, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestServer_CreateWorkspace_RejectsLongName(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
+	token := mustToken(t, "alice", "secret")
+
+	longName := strings.Repeat("a", 200)
+	body := fmt.Sprintf(`{"name":"%s"}`, longName)
+	req := httptest.NewRequest("POST", "/api/workspaces/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for long name, got %d: %s", w.Code, w.Body.String())
 	}
 }

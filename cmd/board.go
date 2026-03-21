@@ -24,12 +24,7 @@ var bdCreateCmd = &cobra.Command{
 		var statuses []string
 		if cmd.Flags().Changed("statuses") {
 			s, _ := cmd.Flags().GetString("statuses")
-			for _, st := range strings.Split(s, ",") {
-				st = strings.TrimSpace(st)
-				if st != "" {
-					statuses = append(statuses, st)
-				}
-			}
+			statuses = parseStatuses(s)
 		}
 		c := newUnscopedClient()
 		bd, err := c.CreateBoard(activeWS, args[0], statuses)
@@ -122,14 +117,7 @@ var bdEditCmd = &cobra.Command{
 		}
 		if cmd.Flags().Changed("statuses") {
 			s, _ := cmd.Flags().GetString("statuses")
-			var statuses []string
-			for _, st := range strings.Split(s, ",") {
-				st = strings.TrimSpace(st)
-				if st != "" {
-					statuses = append(statuses, st)
-				}
-			}
-			fields["statuses"] = statuses
+			fields["statuses"] = parseStatuses(s)
 		}
 		if len(fields) == 0 {
 			return fmt.Errorf("specify --name and/or --statuses")
@@ -146,6 +134,18 @@ var bdEditCmd = &cobra.Command{
 		}
 		return nil
 	},
+}
+
+func parseStatuses(raw string) []string {
+	parts := strings.Split(raw, ",")
+	var out []string
+	for _, s := range parts {
+		s = strings.TrimSpace(s)
+		if s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func init() {
