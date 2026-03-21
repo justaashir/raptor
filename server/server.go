@@ -297,7 +297,7 @@ func (s *Server) listBoards(c echo.Context) error {
 	if err := s.authorize(c, wid, "member"); err != nil {
 		return jsonErr(c, http.StatusForbidden, err.Error())
 	}
-	boards, err := s.db.ListBoardsForUser(wid, username(c))
+	boards, err := s.db.ListBoards(wid)
 	if err != nil {
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}

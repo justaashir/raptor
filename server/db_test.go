@@ -223,7 +223,7 @@ func TestDB_CreateBoard_WithStatuses(t *testing.T) {
 		t.Fatalf("failed to create board: %v", err)
 	}
 
-	boards, err := db.ListBoardsForUser("ws1", "alice")
+	boards, err := db.ListBoards("ws1")
 	if err != nil {
 		t.Fatalf("failed to list boards: %v", err)
 	}
@@ -239,7 +239,7 @@ func TestDB_CreateBoard_WithStatuses(t *testing.T) {
 	}
 }
 
-func TestDB_ListBoardsForUser_AllMembersSeeAllBoards(t *testing.T) {
+func TestDB_ListBoards_AllMembersSeeAllBoards(t *testing.T) {
 	db := newTestDB(t)
 	db.CreateWorkspace("ws1", "Team", "alice")
 	db.AddWorkspaceMember("ws1", "bob", "member")
@@ -247,13 +247,13 @@ func TestDB_ListBoardsForUser_AllMembersSeeAllBoards(t *testing.T) {
 	db.CreateBoard("bd2", "ws1", "Board 2", "alice", model.DefaultStatuses)
 
 	// bob (member) sees all boards — no board-level ACL
-	boards, _ := db.ListBoardsForUser("ws1", "bob")
+	boards, _ := db.ListBoards("ws1")
 	if len(boards) != 2 {
 		t.Fatalf("expected 2 boards for bob (member sees all), got %d", len(boards))
 	}
 
 	// alice (owner) also sees all
-	boards, _ = db.ListBoardsForUser("ws1", "alice")
+	boards, _ = db.ListBoards("ws1")
 	if len(boards) != 2 {
 		t.Fatalf("expected 2 boards for alice (owner), got %d", len(boards))
 	}
@@ -268,7 +268,7 @@ func TestDB_DeleteBoard(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to delete board: %v", err)
 	}
-	boards, _ := db.ListBoardsForUser("ws1", "alice")
+	boards, _ := db.ListBoards("ws1")
 	if len(boards) != 0 {
 		t.Fatalf("expected 0 boards after delete, got %d", len(boards))
 	}
@@ -489,5 +489,35 @@ func TestDB_AssigneeField(t *testing.T) {
 	}
 	if got.CreatedBy != "alice" {
 		t.Fatalf("expected created_by %q, got %q", "alice", got.CreatedBy)
+	}
+}
+
+func TestDB_DeleteWorkspace_CleansUpAllData(t *testing.T) {
+	db := newTestDB(t)
+
+	db.CreateWorkspace("ws1", "Test WS", "alice")
+	db.CreateBoard("b1", "ws1", "Board 1", "alice", []string{"todo"})
+	db.CreateBoard("b2", "ws1", "Board 2", "alice", []string{"todo"})
+	t1 := model.NewTicket("T1", "", "alice")
+	t1.BoardID = "b1"
+	db.CreateTicket(t1)
+	t2 := model.NewTicket("T2", "", "alice")
+	t2.BoardID = "b2"
+	db.CreateTicket(t2)
+
+	err := db.DeleteWorkspace("ws1")
+	if err != nil {
+		t.Fatalf("DeleteWorkspace: %v", err)
+	}
+
+	var ticketCount int64
+	db.conn.Model(&model.Ticket{}).Count(&ticketCount)
+	if ticketCount != 0 {
+		t.Errorf("expected 0 tickets after delete, got %d", ticketCount)
+	}
+	var boardCount int64
+	db.conn.Model(&model.Board{}).Count(&boardCount)
+	if boardCount != 0 {
+		t.Errorf("expected 0 boards after delete, got %d", boardCount)
 	}
 }

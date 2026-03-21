@@ -135,14 +135,9 @@ func (db *DB) DeleteWorkspace(id string) error {
 		if err := tx.Where("workspace_id = ?", id).Delete(&model.WorkspaceMember{}).Error; err != nil {
 			return err
 		}
-		var boards []model.Board
-		if err := tx.Where("workspace_id = ?", id).Find(&boards).Error; err != nil {
+		// Delete all tickets for boards in this workspace in one query
+		if err := tx.Where("board_id IN (SELECT id FROM boards WHERE workspace_id = ?)", id).Delete(&model.Ticket{}).Error; err != nil {
 			return err
-		}
-		for _, b := range boards {
-			if err := tx.Where("board_id = ?", b.ID).Delete(&model.Ticket{}).Error; err != nil {
-				return err
-			}
 		}
 		if err := tx.Where("workspace_id = ?", id).Delete(&model.Board{}).Error; err != nil {
 			return err
@@ -175,15 +170,9 @@ func (db *DB) CreateBoard(id, workspaceID, name, createdBy string, statuses []st
 	}).Error
 }
 
-func (db *DB) ListBoardsForUser(workspaceID, username string) ([]model.Board, error) {
-	// All workspace members see all boards — no board-level ACL
-	_, err := db.GetMemberRole(workspaceID, username)
-	if err != nil {
-		return nil, nil
-	}
-
+func (db *DB) ListBoards(workspaceID string) ([]model.Board, error) {
 	var boards []model.Board
-	err = db.conn.Where("workspace_id = ?", workspaceID).
+	err := db.conn.Where("workspace_id = ?", workspaceID).
 		Order("created_at").Find(&boards).Error
 	return boards, err
 }
