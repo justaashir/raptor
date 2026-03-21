@@ -474,6 +474,12 @@ func (a *App) startCreateForm() tea.Cmd {
 }
 
 func (a *App) updateCreate(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Handle window resize during create
+	if wsMsg, ok := msg.(tea.WindowSizeMsg); ok {
+		a.width = wsMsg.Width
+		a.height = wsMsg.Height
+		a.initPanes()
+	}
 	// Check for esc to cancel
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
 		if key.Matches(keyMsg, keys.Quit) {

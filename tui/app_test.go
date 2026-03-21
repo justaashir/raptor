@@ -310,6 +310,52 @@ func TestApp_CreateView_RendersAsFloatingOverlay(t *testing.T) {
 	}
 }
 
+func TestApp_CreateView_CancelReturnsToListWithoutOverlay(t *testing.T) {
+	app := NewApp("http://localhost:8080", "tok", "ws1", "b1")
+	app.width = 120
+	app.height = 40
+	app.boardName = "Sprint"
+	app.initPanes()
+	app.SetTickets(sampleTickets())
+
+	// Enter create mode
+	app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	if app.state != viewCreate {
+		t.Fatalf("expected viewCreate, got %d", app.state)
+	}
+
+	// Cancel with q
+	app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	if app.state != viewList {
+		t.Fatalf("expected viewList after cancel, got %d", app.state)
+	}
+
+	view := app.View()
+	if !strings.Contains(view, "Sprint") {
+		t.Fatal("after cancel, should show normal board view")
+	}
+	if strings.Contains(view, "New ticket") {
+		t.Fatal("after cancel, should not show create overlay")
+	}
+}
+
+func TestApp_CreateView_HandlesWindowResize(t *testing.T) {
+	app := NewApp("http://localhost:8080", "tok", "ws1", "b1")
+	app.width = 120
+	app.height = 40
+	app.initPanes()
+	app.SetTickets(sampleTickets())
+
+	// Enter create mode
+	app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+
+	// Resize while in create mode
+	app.Update(tea.WindowSizeMsg{Width: 200, Height: 50})
+	if app.width != 200 || app.height != 50 {
+		t.Fatalf("expected dimensions 200x50, got %dx%d", app.width, app.height)
+	}
+}
+
 func TestApp_AllTickets_StoredForStatusBar(t *testing.T) {
 	app := NewApp("http://localhost:8080", "", "", "")
 	app.width = 120
