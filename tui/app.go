@@ -61,14 +61,14 @@ type App struct {
 	createForm *huh.Form
 	newTitle   string
 	newContent string
-	// WebSocket connection (reused across events)
-	wsConn *websocket.Conn
+	// Debounce generation counter for WS events
+	wsDebounceGen uint64
 }
 
 type ticketsMsg []model.Ticket
 type errMsg error
 type wsMsg struct{}
-type debouncedFetchMsg struct{}
+type debouncedFetchMsg struct{ gen uint64 }
 type boardsMsg struct {
 	boards    []model.Board
 	workspace string
@@ -199,12 +199,17 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case wsMsg:
 		// Debounce: coalesce rapid WS events into a single fetch after 200ms
+		a.wsDebounceGen++
+		gen := a.wsDebounceGen
 		return a, tea.Tick(200*time.Millisecond, func(t time.Time) tea.Msg {
-			return debouncedFetchMsg{}
+			return debouncedFetchMsg{gen: gen}
 		})
 
 	case debouncedFetchMsg:
-		return a, tea.Batch(a.fetchTickets, a.listenWS)
+		if msg.gen != a.wsDebounceGen {
+			return a, nil // stale timer, ignore
+		}
+		return a, a.fetchTickets
 
 	case workspacesMsg:
 		if len(msg.workspaces) == 1 {
@@ -587,10 +592,10 @@ func (a *App) fetchBoardsForWorkspace() tea.Msg {
 func (a *App) listenWS() tea.Msg {
 	backoff := time.Second
 	maxBackoff := 30 * time.Second
+	var conn *websocket.Conn
 
 	for {
-		// Reuse existing connection if available
-		if a.wsConn == nil {
+		if conn == nil {
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			c, _, err := websocket.Dial(ctx, wsURL(a.serverURL, a.token), nil)
 			cancel()
@@ -599,15 +604,14 @@ func (a *App) listenWS() tea.Msg {
 				backoff = min(backoff*2, maxBackoff)
 				continue
 			}
-			a.wsConn = c
+			conn = c
 			backoff = time.Second
 		}
 
-		// Read next message from persistent connection
-		_, data, err := a.wsConn.Read(context.Background())
+		_, data, err := conn.Read(context.Background())
 		if err != nil {
-			a.wsConn.Close(websocket.StatusGoingAway, "reconnecting")
-			a.wsConn = nil
+			conn.Close(websocket.StatusGoingAway, "reconnecting")
+			conn = nil
 			time.Sleep(backoff)
 			backoff = min(backoff*2, maxBackoff)
 			continue
