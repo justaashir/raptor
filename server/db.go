@@ -26,22 +26,25 @@ func NewDB(dsn string) (*DB, error) {
 		return nil, err
 	}
 
-	// Enable foreign keys and WAL mode for concurrent reads
-	if err := conn.Exec("PRAGMA foreign_keys = ON").Error; err != nil {
-		return nil, err
-	}
+	// WAL mode for concurrent reads (safe before migration)
 	if err := conn.Exec("PRAGMA journal_mode = WAL").Error; err != nil {
 		return nil, err
 	}
 
-	// Auto-migrate all models
+	// Auto-migrate all models (foreign keys OFF during migration to prevent
+	// CASCADE deletes when GORM recreates tables via drop-and-rename)
 	if err := conn.AutoMigrate(
-		&model.Ticket{},
 		&model.Workspace{},
 		&model.WorkspaceMember{},
 		&model.Board{},
+		&model.Ticket{},
 		&schemaVersion{},
 	); err != nil {
+		return nil, err
+	}
+
+	// Enable foreign keys AFTER migration is complete
+	if err := conn.Exec("PRAGMA foreign_keys = ON").Error; err != nil {
 		return nil, err
 	}
 
@@ -100,6 +103,14 @@ func (db *DB) GetMemberRole(workspaceID, username string) (string, error) {
 		Where("workspace_id = ? AND username = ?", workspaceID, username).
 		First(&member).Error
 	return member.Role, err
+}
+
+func (db *DB) CountOwners(workspaceID string) (int64, error) {
+	var count int64
+	err := db.conn.Model(&model.WorkspaceMember{}).
+		Where("workspace_id = ? AND role = ?", workspaceID, "owner").
+		Count(&count).Error
+	return count, err
 }
 
 func (db *DB) RemoveWorkspaceMember(workspaceID, username string) error {
