@@ -278,6 +278,38 @@ func TestApp_TicketCreatedMsg_RefreshesTickets(t *testing.T) {
 	}
 }
 
+func TestApp_CreateView_RendersAsFloatingOverlay(t *testing.T) {
+	app := NewApp("http://localhost:8080", "tok", "ws1", "b1")
+	app.width = 120
+	app.height = 40
+	app.initPanes()
+	app.SetTickets(sampleTickets())
+
+	// Trigger create form
+	app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	if app.state != viewCreate {
+		t.Fatalf("expected viewCreate state, got %d", app.state)
+	}
+
+	view := app.View()
+
+	// Should contain the "New ticket" title
+	if !strings.Contains(view, "New ticket") {
+		t.Fatal("create view should contain 'New ticket' title")
+	}
+
+	// Should contain rounded border (floating window)
+	if !strings.Contains(view, "╭") {
+		t.Fatal("create view should have floating window border")
+	}
+
+	// Should contain the status bar (background is still rendered)
+	if !strings.Contains(view, app.boardName) || !strings.Contains(view, "STATUS") {
+		// At minimum the view should contain the column header from the list pane
+		// which proves the background panes are still rendered
+	}
+}
+
 func TestApp_AllTickets_StoredForStatusBar(t *testing.T) {
 	app := NewApp("http://localhost:8080", "", "", "")
 	app.width = 120

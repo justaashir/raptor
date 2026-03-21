@@ -344,11 +344,6 @@ func (a *App) View() string {
 		return ""
 	}
 
-	if a.state == viewCreate {
-		titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("14"))
-		return titleStyle.Render("New ticket") + "\n\n" + a.createForm.View()
-	}
-
 	if a.state == viewWorkspaceSelect {
 		return a.viewWorkspaceSelector()
 	}
@@ -398,7 +393,18 @@ func (a *App) View() string {
 		statusBar = errStyle.Render(fmt.Sprintf("Error: %v", a.err))
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, header, panes, statusBar)
+	bg := lipgloss.JoinVertical(lipgloss.Left, header, panes, statusBar)
+
+	if a.state == viewCreate {
+		titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("14"))
+		formContent := titleStyle.Render("New ticket") + "\n\n" + a.createForm.View()
+		boxW := 56
+		boxH := 14
+		overlay := RenderFloatingWindow(formContent, boxW, boxH, a.width, a.height)
+		return overlay
+	}
+
+	return bg
 }
 
 func (a *App) viewWorkspaceSelector() string {
