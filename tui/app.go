@@ -546,26 +546,41 @@ func (a *App) fetchBoardsForWorkspace() tea.Msg {
 }
 
 func (a *App) listenWS() tea.Msg {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	c, _, err := websocket.Dial(ctx, wsURL(a.serverURL), nil)
-	if err != nil {
-		return errMsg(err)
-	}
-	defer c.Close(websocket.StatusNormalClosure, "")
+	backoff := time.Second
+	maxBackoff := 30 * time.Second
 
-	// Read with a long-lived context (not the dial timeout)
-	readCtx := context.Background()
 	for {
-		_, data, err := c.Read(readCtx)
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		c, _, err := websocket.Dial(ctx, wsURL(a.serverURL), nil)
+		cancel()
 		if err != nil {
-			return errMsg(err)
+			time.Sleep(backoff)
+			backoff *= 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+			continue
 		}
-		var ev map[string]string
-		json.Unmarshal(data, &ev)
-		if ev["event"] == "ticket_changed" {
-			return wsMsg{}
+
+		// Reset backoff on successful connection
+		backoff = time.Second
+
+		// Read with a long-lived context
+		for {
+			_, data, err := c.Read(context.Background())
+			if err != nil {
+				c.Close(websocket.StatusNormalClosure, "")
+				break // reconnect
+			}
+			var ev map[string]string
+			json.Unmarshal(data, &ev)
+			if ev["event"] == "ticket_changed" {
+				return wsMsg{}
+			}
 		}
+
+		// Connection dropped — retry after backoff
+		time.Sleep(backoff)
 	}
 }
 
