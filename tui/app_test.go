@@ -215,6 +215,28 @@ func TestApp_SingleWorkspace_AutoSelectsAndShowsBoardSelector(t *testing.T) {
 	}
 }
 
+func TestApp_SingleBoard_AutoSelectsAndGoesToList(t *testing.T) {
+	app := NewApp("http://localhost:8080", "", "ws1", "")
+	app.wsName = "Team Alpha"
+	msg := boardsMsg{
+		boards:    []model.Board{{ID: "b1", Name: "Sprint 1", WorkspaceID: "ws1"}},
+		workspace: "Team Alpha",
+	}
+	_, cmd := app.Update(msg)
+	if app.board != "b1" {
+		t.Fatalf("expected board auto-selected to 'b1', got '%s'", app.board)
+	}
+	if app.boardName != "Sprint 1" {
+		t.Fatalf("expected boardName 'Sprint 1', got '%s'", app.boardName)
+	}
+	if app.state != viewList {
+		t.Fatal("should transition to viewList when only 1 board")
+	}
+	if cmd == nil {
+		t.Fatal("expected a command to fetch tickets")
+	}
+}
+
 func TestApp_AllTickets_StoredForStatusBar(t *testing.T) {
 	app := NewApp("http://localhost:8080", "", "", "")
 	app.width = 120

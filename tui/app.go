@@ -153,6 +153,14 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 
 	case boardsMsg:
+		if len(msg.boards) == 1 {
+			a.board = msg.boards[0].ID
+			a.boardName = msg.boards[0].Name
+			a.workspace = msg.boards[0].WorkspaceID
+			a.wsName = msg.workspace
+			a.state = viewList
+			return a, tea.Batch(a.fetchTickets, a.listenWS)
+		}
 		a.boardChoices = msg.boards
 		a.wsName = msg.workspace
 		a.boardCursor = 0
