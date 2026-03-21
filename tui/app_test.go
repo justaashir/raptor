@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func sampleTickets() []model.Ticket {
@@ -119,6 +121,41 @@ func TestApp_WorkspaceSelector_ShowsWorkspaceNames(t *testing.T) {
 	}
 	if !strings.Contains(view, "Team Beta") {
 		t.Fatal("should show workspace name 'Team Beta'")
+	}
+}
+
+func TestApp_WorkspaceSelector_NavigatesUpDown(t *testing.T) {
+	app := NewApp("http://localhost:8080", "", "", "")
+	app.state = viewWorkspaceSelect
+	app.wsChoices = []model.Workspace{
+		{ID: "ws1", Name: "Team Alpha"},
+		{ID: "ws2", Name: "Team Beta"},
+		{ID: "ws3", Name: "Team Gamma"},
+	}
+	app.wsCursor = 0
+
+	// Move down
+	app.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if app.wsCursor != 1 {
+		t.Fatalf("expected cursor 1 after down, got %d", app.wsCursor)
+	}
+
+	// Move down again
+	app.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if app.wsCursor != 2 {
+		t.Fatalf("expected cursor 2 after second down, got %d", app.wsCursor)
+	}
+
+	// Should not go past last
+	app.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if app.wsCursor != 2 {
+		t.Fatalf("expected cursor 2 (clamped), got %d", app.wsCursor)
+	}
+
+	// Move up
+	app.Update(tea.KeyMsg{Type: tea.KeyUp})
+	if app.wsCursor != 1 {
+		t.Fatalf("expected cursor 1 after up, got %d", app.wsCursor)
 	}
 }
 

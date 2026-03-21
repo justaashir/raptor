@@ -156,10 +156,29 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch a.state {
+		case viewWorkspaceSelect:
+			return a.updateWorkspaceSelect(msg)
 		case viewBoardSelect:
 			return a.updateBoardSelect(msg)
 		default:
 			return a.updateList(msg)
+		}
+	}
+	return a, nil
+}
+
+func (a *App) updateWorkspaceSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, keys.Quit):
+		a.quitting = true
+		return a, tea.Quit
+	case key.Matches(msg, keys.Up):
+		if a.wsCursor > 0 {
+			a.wsCursor--
+		}
+	case key.Matches(msg, keys.Down):
+		if a.wsCursor < len(a.wsChoices)-1 {
+			a.wsCursor++
 		}
 	}
 	return a, nil
