@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"raptor/model"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -26,7 +27,7 @@ func CountByStatus(tickets []model.Ticket) map[model.Status]int {
 }
 
 // RenderStatusBar renders the bottom status bar with Dracula colors.
-func RenderStatusBar(tickets []model.Ticket, boardName string, focus focusPane, width int) string {
+func RenderStatusBar(tickets []model.Ticket, boardName string, width int) string {
 	counts := CountByStatus(tickets)
 
 	// Filter badge
@@ -37,9 +38,17 @@ func RenderStatusBar(tickets []model.Ticket, boardName string, focus focusPane, 
 		Padding(0, 1).
 		Render("ALL")
 
-	// Ticket counts — render all statuses that appear in the data
+	// Ticket counts — sort statuses for deterministic display
+	var statuses []model.Status
+	for status := range counts {
+		statuses = append(statuses, status)
+	}
+	sort.Slice(statuses, func(i, j int) bool {
+		return string(statuses[i]) < string(statuses[j])
+	})
 	countParts := []string{}
-	for status, count := range counts {
+	for _, status := range statuses {
+		count := counts[status]
 		icon := StatusIcon(status)
 		color := StatusColor(status)
 		countParts = append(countParts, lipgloss.NewStyle().Foreground(color).Render(
