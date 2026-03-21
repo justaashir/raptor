@@ -42,6 +42,31 @@ type ticketDelegate struct {
 func (d ticketDelegate) Height() int                               { return 1 }
 func (d ticketDelegate) Spacing() int                              { return 0 }
 func (d ticketDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd   { return nil }
+// colWidths computes column widths from available pane width.
+// Returns statusW, idW, assigneeW, ageW, titleW.
+// Each width includes a 2-char trailing gap for spacing.
+func colWidths(total int) (int, int, int, int, int) {
+	const prefix = 5    // icon(2) + star(2) + space(1)
+	const statusW = 10  // "IN_PROG" (7) + 3 gap
+	const idW = 12      // 8-char short ID + 4 gap
+	const ageW = 5      // "2h"/"3d" + 3 gap
+	fixed := prefix + statusW + idW + ageW
+	remaining := total - fixed
+	// Split remaining between assignee and title
+	assigneeW := 14
+	if assigneeW > remaining/2 {
+		assigneeW = remaining / 2
+	}
+	if assigneeW < 4 {
+		assigneeW = 4
+	}
+	titleW := remaining - assigneeW
+	if titleW < 3 {
+		titleW = 3
+	}
+	return statusW, idW, assigneeW, ageW, titleW
+}
+
 func (d ticketDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
 	ti, ok := listItem.(TicketItem)
 	if !ok {
@@ -49,21 +74,16 @@ func (d ticketDelegate) Render(w io.Writer, m list.Model, index int, listItem li
 	}
 	t := ti.ticket
 
-	status := padRight(FormatStatus(t.Status), 8)
-	id := padRight(t.ID, 10)
-	assignee := "unassigned"
+	statusW, idW, assigneeW, ageW, titleW := colWidths(d.width)
+
+	status := padRight(FormatStatus(t.Status), statusW)
+	id := padRight(t.ID, idW)
+	assignee := "—"
 	if t.Assignee != "" {
 		assignee = "@" + t.Assignee
 	}
-	assignee = padRight(assignee, 10)
-	age := padRight(FormatAge(t.CreatedAt), 5)
-
-	// Prefix: icon(2) + star(2) + spaces(2) = 6, then columns
-	fixedW := 6 + 8 + 10 + 10 + 5
-	titleW := d.width - fixedW
-	if titleW < 3 {
-		titleW = 3
-	}
+	assignee = padRight(assignee, assigneeW)
+	age := padRight(FormatAge(t.CreatedAt), ageW)
 	title := truncate(t.Title, titleW)
 
 	statusColor := StatusColor(t.Status)
@@ -98,25 +118,48 @@ func (d ticketDelegate) Render(w io.Writer, m list.Model, index int, listItem li
 	fmt.Fprint(w, lipgloss.NewStyle().MaxWidth(d.width).Render(raw))
 }
 
-// padRight pads s with spaces to width using display width.
-func padRight(s string, width int) string {
+// truncateToWidth cuts s to fit within maxW display columns.
+func truncateToWidth(s string, maxW int) string {
 	w := lipgloss.Width(s)
-	if w >= width {
-		return s[:width]
-	}
-	return s + strings.Repeat(" ", width-w)
-}
-
-// truncate cuts a string to maxLen runes, adding "..." if it was longer.
-func truncate(s string, maxLen int) string {
-	runes := []rune(s)
-	if len(runes) <= maxLen {
+	if w <= maxW {
 		return s
 	}
-	if maxLen <= 3 {
-		return string(runes[:maxLen])
+	// Remove runes from the end until it fits
+	runes := []rune(s)
+	for len(runes) > 0 {
+		runes = runes[:len(runes)-1]
+		if lipgloss.Width(string(runes)) <= maxW {
+			return string(runes)
+		}
 	}
-	return string(runes[:maxLen-3]) + "..."
+	return ""
+}
+
+// padRight pads s with spaces to exactly `width` display columns,
+// guaranteeing a 2-char trailing gap so columns never touch.
+func padRight(s string, width int) string {
+	const gap = 2
+	maxContent := width - gap
+	if maxContent < 1 {
+		maxContent = 1
+	}
+	s = truncateToWidth(s, maxContent)
+	w := lipgloss.Width(s)
+	if w < width {
+		return s + strings.Repeat(" ", width-w)
+	}
+	return s
+}
+
+// truncate cuts s to maxW display columns, adding "..." if truncated.
+func truncate(s string, maxW int) string {
+	if lipgloss.Width(s) <= maxW {
+		return s
+	}
+	if maxW <= 3 {
+		return truncateToWidth(s, maxW)
+	}
+	return truncateToWidth(s, maxW-3) + "..."
 }
 
 // ListPane wraps a bubbles/list for displaying tickets.
@@ -222,9 +265,14 @@ func (lp *ListPane) Update(msg tea.Msg) tea.Cmd {
 
 // ColumnHeader returns the styled column header string.
 func (lp *ListPane) ColumnHeader() string {
-	return ColumnHeaderStyle.Width(lp.width).Render(
-		fmt.Sprintf("    %-8s %-10s %-10s %-5s %s",
-			"STATUS", "ID", "ASSIGNEE", "AGE", "TITLE"))
+	statusW, idW, assigneeW, ageW, _ := colWidths(lp.width)
+	header := fmt.Sprintf("    %s%s%s%s%s",
+		padRight("STATUS", statusW),
+		padRight("ID", idW),
+		padRight("ASSIGNEE", assigneeW),
+		padRight("AGE", ageW),
+		"TITLE")
+	return ColumnHeaderStyle.Width(lp.width).Render(header)
 }
 
 // View renders the list.

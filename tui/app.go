@@ -32,6 +32,7 @@ type App struct {
 	board      string
 	boardName  string
 	wsName     string
+	cachePath  string
 	listPane   *ListPane
 	detailPane *DetailPane
 	focused    focusPane
@@ -71,6 +72,7 @@ func NewApp(serverURL, token, workspace, board string) *App {
 		token:      token,
 		workspace:  workspace,
 		board:      board,
+		cachePath:  DefaultCachePath(),
 		focused:    focusList,
 		listPane:   NewListPane(40, 20),
 		detailPane: NewDetailPane(60, 20),
@@ -126,6 +128,13 @@ func (a *App) toggleFocus() {
 // Bubble Tea interface
 
 func (a *App) Init() tea.Cmd {
+	// Load cached tickets instantly so the UI isn't empty while we fetch
+	if a.board != "" && a.cachePath != "" {
+		if cached, _ := LoadTicketCache(a.cachePath, a.board); len(cached) > 0 {
+			a.SetTickets(cached)
+		}
+	}
+
 	if a.workspace == "" {
 		return a.fetchWorkspaces
 	}
@@ -149,6 +158,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ticketsMsg:
 		a.SetTickets([]model.Ticket(msg))
+		if a.cachePath != "" && a.board != "" {
+			SaveTicketCache(a.cachePath, a.board, []model.Ticket(msg))
+		}
 
 	case wsMsg:
 		return a, tea.Batch(a.fetchTickets, a.listenWS)
@@ -171,6 +183,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.workspace = msg.boards[0].WorkspaceID
 			a.wsName = msg.workspace
 			a.state = viewList
+			if a.cachePath != "" {
+				if cached, _ := LoadTicketCache(a.cachePath, a.board); len(cached) > 0 {
+					a.SetTickets(cached)
+				}
+			}
 			return a, tea.Batch(a.fetchTickets, a.listenWS)
 		}
 		a.boardChoices = msg.boards
@@ -246,6 +263,11 @@ func (a *App) updateBoardSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.boardName = selected.Name
 			a.workspace = selected.WorkspaceID
 			a.state = viewList
+			if a.cachePath != "" {
+				if cached, _ := LoadTicketCache(a.cachePath, a.board); len(cached) > 0 {
+					a.SetTickets(cached)
+				}
+			}
 			return a, tea.Batch(a.fetchTickets, a.listenWS)
 		}
 	}
@@ -341,11 +363,13 @@ func (a *App) View() string {
 	listView := listStyle.
 		Width(listW).
 		Height(contentH).
+		MaxHeight(contentH).
 		Render(listContent)
 
 	detailView := detailStyle.
 		Width(detailW).
 		Height(contentH).
+		MaxHeight(contentH).
 		Render(a.detailPane.View())
 
 	panes := lipgloss.JoinHorizontal(lipgloss.Top, listView, detailView)

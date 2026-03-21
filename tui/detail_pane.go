@@ -7,8 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/glamour/styles"
-	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/glamour/ansi"
 )
 
 // DetailPane wraps a bubbles/viewport for displaying ticket details.
@@ -34,14 +33,126 @@ func NewDetailPane(width, height int) *DetailPane {
 	}
 }
 
-// newGlamourRenderer creates a cached glamour renderer with proper styling.
+func sp(s string) *string { return &s }
+func bp(b bool) *bool     { return &b }
+func up(u uint) *uint     { return &u }
+
+// raptorStyle builds a glamour StyleConfig matching the Dracula palette,
+// modelled after beads_viewer's buildStyleFromTheme.
+func raptorStyle() ansi.StyleConfig {
+	fg := "#f8f8f2"
+	purple := "#bd93f9"
+	pink := "#ff79c6"
+	cyan := "#8be9fd"
+	green := "#50fa7b"
+	orange := "#ffb86c"
+	yellow := "#f1fa8c"
+	comment := "#6272a4"
+	tableBg := "#383a4a"
+
+	return ansi.StyleConfig{
+		Document: ansi.StyleBlock{
+			StylePrimitive: ansi.StylePrimitive{Color: sp(fg)},
+			Margin:         up(0),
+		},
+		Paragraph: ansi.StyleBlock{
+			StylePrimitive: ansi.StylePrimitive{Color: sp(fg)},
+			Margin:         up(0),
+		},
+		Heading: ansi.StyleBlock{
+			StylePrimitive: ansi.StylePrimitive{Color: sp(purple), Bold: bp(true)},
+			Margin:         up(0),
+		},
+		H1: ansi.StyleBlock{
+			StylePrimitive: ansi.StylePrimitive{Color: sp(purple), Bold: bp(true), BlockSuffix: "\n"},
+			Margin:         up(0),
+		},
+		H2: ansi.StyleBlock{
+			StylePrimitive: ansi.StylePrimitive{Color: sp(pink), Bold: bp(true)},
+			Margin:         up(0),
+		},
+		H3: ansi.StyleBlock{
+			StylePrimitive: ansi.StylePrimitive{Color: sp(cyan), Bold: bp(true)},
+			Margin:         up(0),
+		},
+		H4: ansi.StyleBlock{
+			StylePrimitive: ansi.StylePrimitive{Color: sp(orange), Bold: bp(true)},
+			Margin:         up(0),
+		},
+		Strong: ansi.StylePrimitive{
+			Color: sp(orange),
+			Bold:  bp(true),
+		},
+		Emph: ansi.StylePrimitive{
+			Color:  sp(yellow),
+			Italic: bp(true),
+		},
+		BlockQuote: ansi.StyleBlock{
+			StylePrimitive: ansi.StylePrimitive{Color: sp(comment), Italic: bp(true)},
+			Indent:         up(2),
+			Margin:         up(0),
+		},
+		List: ansi.StyleList{
+			StyleBlock: ansi.StyleBlock{
+				StylePrimitive: ansi.StylePrimitive{Color: sp(fg)},
+				Margin:         up(0),
+			},
+			LevelIndent: 2,
+		},
+		Item: ansi.StylePrimitive{
+			BlockPrefix: "• ",
+		},
+		Link: ansi.StylePrimitive{
+			Color:     sp(cyan),
+			Underline: bp(true),
+		},
+		LinkText: ansi.StylePrimitive{
+			Color: sp(purple),
+		},
+		Code: ansi.StyleBlock{
+			StylePrimitive: ansi.StylePrimitive{Color: sp(green)},
+		},
+		CodeBlock: ansi.StyleCodeBlock{
+			StyleBlock: ansi.StyleBlock{
+				StylePrimitive: ansi.StylePrimitive{Color: sp(green)},
+				Margin:         up(0),
+			},
+			Chroma: &ansi.Chroma{
+				Text:    ansi.StylePrimitive{Color: sp(fg)},
+				Keyword: ansi.StylePrimitive{Color: sp(purple)},
+				Name:    ansi.StylePrimitive{Color: sp(cyan)},
+				Comment: ansi.StylePrimitive{Color: sp(comment), Italic: bp(true)},
+				LiteralString: ansi.StylePrimitive{Color: sp(yellow)},
+				LiteralNumber: ansi.StylePrimitive{Color: sp(purple)},
+			},
+		},
+		HorizontalRule: ansi.StylePrimitive{
+			Color:  sp(comment),
+			Format: "─────────────────────────────────────────",
+		},
+		Table: ansi.StyleTable{
+			StyleBlock: ansi.StyleBlock{
+				StylePrimitive: ansi.StylePrimitive{
+					Color:           sp(fg),
+					BackgroundColor: sp(tableBg),
+				},
+				Margin: up(0),
+			},
+			CenterSeparator: sp("┼"),
+			ColumnSeparator: sp("│"),
+			RowSeparator:    sp("─"),
+		},
+	}
+}
+
+// newGlamourRenderer creates a cached glamour renderer with Dracula-themed styling.
 func newGlamourRenderer(width int) *glamour.TermRenderer {
 	contentWidth := width - 4
 	if contentWidth < 20 {
 		contentWidth = 20
 	}
 	r, err := glamour.NewTermRenderer(
-		glamour.WithStandardStyle(styles.DraculaStyle),
+		glamour.WithStyles(raptorStyle()),
 		glamour.WithWordWrap(contentWidth),
 		glamour.WithEmoji(),
 	)
@@ -51,72 +162,58 @@ func newGlamourRenderer(width int) *glamour.TermRenderer {
 	return r
 }
 
-// RenderDetailContent renders ticket detail as a string. Returns placeholder for nil ticket.
+// RenderDetailContent renders ticket detail as markdown, then renders through glamour.
 // Accepts an optional cached glamour renderer for performance.
 func RenderDetailContent(t *model.Ticket, width int, renderer ...*glamour.TermRenderer) string {
 	if t == nil {
 		return "No ticket selected"
 	}
 
-	// Title with icon
-	icon := lipgloss.NewStyle().Foreground(StatusColor(t.Status)).Render(StatusIcon(t.Status))
-	title := fmt.Sprintf("%s %s", icon, DetailTitleStyle.Render(t.Title))
+	var r *glamour.TermRenderer
+	if len(renderer) > 0 && renderer[0] != nil {
+		r = renderer[0]
+	} else {
+		r = newGlamourRenderer(width)
+	}
 
-	// Status badge
-	statusBadge := lipgloss.NewStyle().
-		Background(StatusColor(t.Status)).
-		Foreground(lipgloss.Color("#282a36")).
-		Bold(true).
-		Padding(0, 1).
-		Render(FormatStatus(t.Status))
+	// Build everything as markdown, render once through glamour
+	var md string
 
-	metaLines := fmt.Sprintf(
-		"%s  %s %s  %s %s",
-		statusBadge,
-		DetailMetaKeyStyle.Render("ID"),
-		lipgloss.NewStyle().Foreground(colorCyan).Render(t.ID),
-		DetailMetaKeyStyle.Render("Age"),
-		lipgloss.NewStyle().Foreground(colorYellow).Render(FormatAge(t.CreatedAt)),
+	// Title
+	md += fmt.Sprintf("# %s %s\n\n", StatusIcon(t.Status), t.Title)
+
+	// Metadata table (like beads_viewer)
+	assignee := "—"
+	if t.Assignee != "" {
+		assignee = "@" + t.Assignee
+	}
+	createdBy := "—"
+	if t.CreatedBy != "" {
+		createdBy = t.CreatedBy
+	}
+
+	md += "| ID | Status | Assignee | Age | Created By |\n"
+	md += "|---|---|---|---|---|\n"
+	md += fmt.Sprintf("| **%s** | **%s** | %s | %s | %s |\n\n",
+		t.ID,
+		FormatStatus(t.Status),
+		assignee,
+		FormatAge(t.CreatedAt),
+		createdBy,
 	)
 
-	if t.Assignee != "" {
-		metaLines += fmt.Sprintf("  %s %s",
-			DetailMetaKeyStyle.Render("Assignee"),
-			lipgloss.NewStyle().Foreground(colorPurple).Render("@"+t.Assignee),
-		)
-	}
-
-	if t.CreatedBy != "" {
-		metaLines += fmt.Sprintf("  %s %s",
-			DetailMetaKeyStyle.Render("By"),
-			lipgloss.NewStyle().Foreground(colorOrange).Render(t.CreatedBy),
-		)
-	}
-
-	var body string
+	// Content / description
 	if t.Content != "" {
-		// Use cached renderer if provided, otherwise create one
-		var r *glamour.TermRenderer
-		if len(renderer) > 0 && renderer[0] != nil {
-			r = renderer[0]
-		} else {
-			r = newGlamourRenderer(width)
-		}
-		if r != nil {
-			rendered, err := r.Render(t.Content)
-			if err == nil {
-				body = rendered
-			} else {
-				body = t.Content
-			}
-		} else {
-			body = t.Content
-		}
+		md += t.Content + "\n"
 	}
 
-	separator := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("─────────────────────────────")
-
-	return title + "\n\n" + metaLines + "\n\n" + separator + "\n" + body
+	if r != nil {
+		rendered, err := r.Render(md)
+		if err == nil {
+			return rendered
+		}
+	}
+	return md
 }
 
 // SetTicket updates the detail pane with a new ticket.
