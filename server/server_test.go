@@ -1032,6 +1032,30 @@ func TestServer_Auth_RateLimited(t *testing.T) {
 	}
 }
 
+func TestServer_Auth_RateLimitPerIP(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret123", []string{"alice", "bob"})
+
+	// Exhaust limit from IP1
+	for i := 0; i < 6; i++ {
+		req := httptest.NewRequest("POST", "/api/auth", strings.NewReader(`{"username":"alice"}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.RemoteAddr = "1.2.3.4:1234"
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, req)
+	}
+
+	// IP2 should still work
+	req := httptest.NewRequest("POST", "/api/auth", strings.NewReader(`{"username":"bob"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "5.6.7.8:5678"
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code == http.StatusTooManyRequests {
+		t.Fatal("IP2 should not be rate limited when IP1 is exhausted")
+	}
+}
+
 func TestServer_CreateTicket_RejectsEmptyTitle(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
 	token := mustToken(t, "alice", "secret")

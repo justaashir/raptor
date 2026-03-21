@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"raptor/model"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,6 +18,32 @@ import (
 	"gorm.io/gorm"
 	"nhooyr.io/websocket"
 )
+
+type ipRateLimiter struct {
+	mu       sync.Mutex
+	limiters map[string]*rate.Limiter
+	r        rate.Limit
+	burst    int
+}
+
+func newIPRateLimiter(r rate.Limit, burst int) *ipRateLimiter {
+	return &ipRateLimiter{
+		limiters: make(map[string]*rate.Limiter),
+		r:        r,
+		burst:    burst,
+	}
+}
+
+func (rl *ipRateLimiter) allow(ip string) bool {
+	rl.mu.Lock()
+	limiter, ok := rl.limiters[ip]
+	if !ok {
+		limiter = rate.NewLimiter(rl.r, rl.burst)
+		rl.limiters[ip] = limiter
+	}
+	rl.mu.Unlock()
+	return limiter.Allow()
+}
 
 var allowedPatchFields = map[string]bool{
 	"title": true, "content": true, "status": true,
@@ -59,9 +86,9 @@ func NewServer(db *DB, hub *Hub, opts ...Option) *Server {
 	})
 
 	// Public routes (no auth)
-	authLimiter := rate.NewLimiter(rate.Every(time.Second), 5)
+	authLimiter := newIPRateLimiter(rate.Every(time.Second), 5)
 	s.Echo.POST("/api/auth", func(c echo.Context) error {
-		if !authLimiter.Allow() {
+		if !authLimiter.allow(c.RealIP()) {
 			return c.JSON(http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
 		}
 		return s.handleAuth(c)
