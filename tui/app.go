@@ -396,12 +396,14 @@ func (a *App) View() string {
 	bg := lipgloss.JoinVertical(lipgloss.Left, header, panes, statusBar)
 
 	if a.state == viewCreate {
-		titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("14"))
-		formContent := titleStyle.Render("New ticket") + "\n\n" + a.createForm.View()
+		titleStyle := lipgloss.NewStyle().Bold(true).Foreground(colorCyan)
+		helpStyle := lipgloss.NewStyle().Foreground(colorComment)
+		formContent := titleStyle.Render("  New ticket") + "\n\n" +
+			a.createForm.View() + "\n" +
+			helpStyle.Render("  enter submit  q cancel")
 		boxW := 56
-		boxH := 14
-		overlay := RenderFloatingWindow(formContent, boxW, boxH, a.width, a.height)
-		return overlay
+		boxH := 16
+		return OverlayOnBackground(formContent, boxW, boxH, bg, a.width, a.height)
 	}
 
 	return bg

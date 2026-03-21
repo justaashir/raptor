@@ -43,19 +43,29 @@ func TestStatusColor_ReturnsCorrectColors(t *testing.T) {
 	}
 }
 
-func TestRenderFloatingWindow_ContainsContent(t *testing.T) {
+func TestOverlayOnBackground_ContainsContent(t *testing.T) {
+	bg := strings.Repeat("BACKGROUND LINE\n", 24)
 	content := "Hello World"
-	result := RenderFloatingWindow(content, 30, 10, 80, 24)
+	result := OverlayOnBackground(content, 30, 10, bg, 80, 24)
 	if !strings.Contains(result, "Hello World") {
-		t.Fatalf("floating window should contain content, got:\n%s", result)
+		t.Fatalf("overlay should contain content, got:\n%s", result)
 	}
 }
 
-func TestRenderFloatingWindow_HasBorder(t *testing.T) {
-	result := RenderFloatingWindow("test", 30, 10, 80, 24)
-	// Should contain rounded border characters
+func TestOverlayOnBackground_HasBorder(t *testing.T) {
+	bg := strings.Repeat("BACKGROUND LINE\n", 24)
+	result := OverlayOnBackground("test", 30, 10, bg, 80, 24)
 	if !strings.Contains(result, "╭") {
-		t.Fatalf("floating window should have rounded border, got:\n%s", result)
+		t.Fatalf("overlay should have rounded border, got:\n%s", result)
+	}
+}
+
+func TestOverlayOnBackground_PreservesBackground(t *testing.T) {
+	bg := strings.Repeat("BACKGROUND LINE HERE\n", 24)
+	result := OverlayOnBackground("tiny", 20, 5, bg, 80, 24)
+	// Background lines outside the overlay area should still be present
+	if !strings.Contains(result, "BACKGROUND") {
+		t.Fatalf("overlay should preserve background lines, got:\n%s", result)
 	}
 }
 

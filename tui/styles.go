@@ -2,6 +2,7 @@ package tui
 
 import (
 	"raptor/model"
+	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -68,9 +69,9 @@ func StatusStar(s model.Status) string {
 	}
 }
 
-// RenderFloatingWindow renders content inside a centered floating box
-// with a rounded border, overlaid on top of a blank background.
-func RenderFloatingWindow(content string, boxW, boxH, termW, termH int) string {
+// OverlayOnBackground renders content inside a centered floating box
+// composited on top of the background string so the background remains visible.
+func OverlayOnBackground(content string, boxW, boxH int, bg string, termW, termH int) string {
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(colorPurple).
@@ -80,7 +81,67 @@ func RenderFloatingWindow(content string, boxW, boxH, termW, termH int) string {
 		Height(boxH).
 		Padding(1, 2).
 		Render(content)
-	return lipgloss.Place(termW, termH, lipgloss.Center, lipgloss.Center, box)
+
+	boxLines := strings.Split(box, "\n")
+	bgLines := strings.Split(bg, "\n")
+
+	// Pad background to fill terminal height
+	for len(bgLines) < termH {
+		bgLines = append(bgLines, "")
+	}
+
+	// Compute centered position
+	boxRenderedW := lipgloss.Width(box)
+	boxRenderedH := len(boxLines)
+	startY := (termH - boxRenderedH) / 2
+	startX := (termW - boxRenderedW) / 2
+	if startY < 0 {
+		startY = 0
+	}
+	if startX < 0 {
+		startX = 0
+	}
+
+	// Overlay box lines onto background
+	for i, bLine := range boxLines {
+		bgIdx := startY + i
+		if bgIdx >= len(bgLines) {
+			break
+		}
+		bgLine := bgLines[bgIdx]
+		// Pad background line to startX with spaces
+		bgW := lipgloss.Width(bgLine)
+		var left string
+		if bgW >= startX {
+			left = truncateToWidth(bgLine, startX)
+		} else {
+			left = bgLine + strings.Repeat(" ", startX-bgW)
+		}
+		// Right side of background after the box
+		rightStart := startX + lipgloss.Width(bLine)
+		var right string
+		if bgW > rightStart {
+			// We need the tail of the background line
+			// Use a simple approach: pad and slice
+			right = truncateRight(bgLine, rightStart)
+		}
+		bgLines[bgIdx] = left + bLine + right
+	}
+
+	return strings.Join(bgLines[:termH], "\n")
+}
+
+// truncateRight returns the portion of s after skipW display columns.
+func truncateRight(s string, skipW int) string {
+	runes := []rune(s)
+	w := 0
+	for i, r := range runes {
+		w += lipgloss.Width(string(r))
+		if w > skipW {
+			return string(runes[i:])
+		}
+	}
+	return ""
 }
 
 // Pane styles
