@@ -126,6 +126,46 @@ var wsInviteCmd = &cobra.Command{
 	},
 }
 
+var wsRmForce bool
+
+var wsRmCmd = &cobra.Command{
+	Use:   "rm <name-or-id>",
+	Short: "Delete a workspace",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c := newUnscopedClient()
+		workspaces, err := c.ListWorkspaces()
+		if err != nil {
+			return err
+		}
+		search := strings.ToLower(args[0])
+		var matchID, matchName string
+		for _, ws := range workspaces {
+			if ws.ID == args[0] || strings.ToLower(ws.Name) == search {
+				matchID = ws.ID
+				matchName = ws.Name
+				break
+			}
+		}
+		if matchID == "" {
+			return fmt.Errorf("workspace %q not found", args[0])
+		}
+		if !wsRmForce {
+			fmt.Printf("Delete workspace %s (%s)? Use --force to confirm.\n", matchName, matchID)
+			return nil
+		}
+		if err := c.DeleteWorkspace(matchID); err != nil {
+			return err
+		}
+		if jsonOutput {
+			printJSON(map[string]string{"deleted": matchID})
+		} else {
+			fmt.Printf("Deleted workspace %s (%s)\n", matchName, matchID)
+		}
+		return nil
+	},
+}
+
 var wsKickCmd = &cobra.Command{
 	Use:   "kick <username>",
 	Short: "Remove a user from the workspace",
@@ -144,6 +184,7 @@ var wsKickCmd = &cobra.Command{
 }
 
 func init() {
-	workspaceCmd.AddCommand(wsCreateCmd, wsListCmd, wsUseCmd, wsMembersCmd, wsInviteCmd, wsKickCmd)
+	wsRmCmd.Flags().BoolVarP(&wsRmForce, "force", "f", false, "skip confirmation")
+	workspaceCmd.AddCommand(wsCreateCmd, wsListCmd, wsUseCmd, wsMembersCmd, wsInviteCmd, wsKickCmd, wsRmCmd)
 	rootCmd.AddCommand(workspaceCmd)
 }
