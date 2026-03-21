@@ -52,7 +52,7 @@ func StatusIcon(s model.Status) string {
 	case model.InProgress:
 		return "⚡"
 	case model.Done:
-		return "✅"
+		return "  "
 	default:
 		return "📄"
 	}
