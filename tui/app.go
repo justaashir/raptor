@@ -18,10 +18,10 @@ import (
 
 // Create modal dimensions.
 const (
-	createBoxW  = 56
-	createBoxH  = 16
+	createBoxW   = 56
+	createBoxH   = 18
 	createBoxPad = 2
-	createFormW = createBoxW - createBoxPad*2
+	createFormW  = createBoxW - createBoxPad*2
 )
 
 type viewState int
@@ -404,15 +404,24 @@ func (a *App) View() string {
 	bg := lipgloss.JoinVertical(lipgloss.Left, header, panes, statusBar)
 
 	if a.state == viewCreate {
-		titleStyle := lipgloss.NewStyle().Bold(true).Foreground(colorCyan)
+		contentW := createFormW
+		titleStyle := lipgloss.NewStyle().Bold(true).Foreground(colorCyan).Width(contentW)
 		keyStyle := lipgloss.NewStyle().Foreground(colorPurple).Bold(true)
 		helpStyle := lipgloss.NewStyle().Foreground(colorComment)
 		helpLine := keyStyle.Render("enter") + helpStyle.Render(" submit  ") +
 			keyStyle.Render("tab") + helpStyle.Render(" next  ") +
 			keyStyle.Render("q") + helpStyle.Render(" cancel")
-		formContent := titleStyle.Render("New ticket") + "\n\n" +
-			a.createForm.View() + "\n" +
-			helpLine
+
+		title := titleStyle.Render("New ticket")
+		// Force form output to exact content width
+		formView := lipgloss.NewStyle().Width(contentW).Render(a.createForm.View())
+		// Use a fixed-height block for form area so help line sits at bottom
+		// Box height minus padding (top+bottom=2), title (1), gap (1), help (1) = 5 lines of chrome
+		formAreaH := createBoxH - 5
+		formArea := lipgloss.NewStyle().Width(contentW).Height(formAreaH).Render(formView)
+		helpArea := lipgloss.NewStyle().Width(contentW).Render(helpLine)
+
+		formContent := title + "\n\n" + formArea + "\n" + helpArea
 		return OverlayOnBackground(formContent, createBoxW, createBoxH, bg, a.width, a.height)
 	}
 
