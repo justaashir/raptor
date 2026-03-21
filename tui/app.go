@@ -16,6 +16,14 @@ import (
 	"nhooyr.io/websocket"
 )
 
+// Create modal dimensions.
+const (
+	createBoxW   = 56
+	createBoxH   = 18
+	createBoxPad = 2
+	createFormW  = createBoxW - createBoxPad*2
+)
+
 type viewState int
 
 const (
@@ -344,11 +352,6 @@ func (a *App) View() string {
 		return ""
 	}
 
-	if a.state == viewCreate {
-		titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("14"))
-		return titleStyle.Render("New ticket") + "\n\n" + a.createForm.View()
-	}
-
 	if a.state == viewWorkspaceSelect {
 		return a.viewWorkspaceSelector()
 	}
@@ -398,7 +401,36 @@ func (a *App) View() string {
 		statusBar = errStyle.Render(fmt.Sprintf("Error: %v", a.err))
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, header, panes, statusBar)
+	// Pad the view to fill the terminal so switching from overlay
+	// (which renders exactly a.height lines) doesn't leave stale lines.
+	content := lipgloss.JoinVertical(lipgloss.Left, header, panes)
+	contentLines := strings.Count(content, "\n") + 1
+	statusLines := strings.Count(statusBar, "\n") + 1
+	gap := a.height - contentLines - statusLines
+	if gap < 0 {
+		gap = 0
+	}
+	bg := content + strings.Repeat("\n", gap) + "\n" + statusBar
+
+	if a.state == viewCreate {
+		titleStyle := lipgloss.NewStyle().Bold(true).Foreground(colorCyan)
+		keyStyle := lipgloss.NewStyle().Foreground(colorPurple).Bold(true)
+		helpStyle := lipgloss.NewStyle().Foreground(colorComment)
+		helpLine := keyStyle.Render("enter") + helpStyle.Render(" submit  ") +
+			keyStyle.Render("tab") + helpStyle.Render(" next  ") +
+			keyStyle.Render("esc") + helpStyle.Render(" cancel")
+
+		title := titleStyle.Render("New ticket")
+		formView := a.createForm.View()
+		// Fixed-height form area so help line sits at the bottom
+		formAreaH := createBoxH - 5
+		formArea := lipgloss.NewStyle().Height(formAreaH).Render(formView)
+
+		formContent := title + "\n\n" + formArea + "\n" + helpLine
+		return overlayOnBackground(formContent, createBoxW, createBoxH, bg, a.width, a.height)
+	}
+
+	return bg
 }
 
 func (a *App) viewWorkspaceSelector() string {
@@ -457,20 +489,28 @@ func (a *App) startCreateForm() tea.Cmd {
 		huh.NewGroup(
 			huh.NewInput().
 				Title("Title").
+				Placeholder("What needs to be done?").
 				Value(&a.newTitle),
 			huh.NewText().
-				Title("Content (markdown)").
+				Title("Content").
+				Placeholder("Details (markdown)...").
 				Value(&a.newContent),
 		),
-	).WithWidth(50).WithShowHelp(true).WithShowErrors(true)
+	).WithWidth(createFormW).WithShowHelp(false).WithShowErrors(true).WithTheme(createFormTheme())
 	a.state = viewCreate
 	return a.createForm.Init()
 }
 
 func (a *App) updateCreate(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// Check for esc to cancel
+	// Handle window resize during create
+	if sizeMsg, ok := msg.(tea.WindowSizeMsg); ok {
+		a.width = sizeMsg.Width
+		a.height = sizeMsg.Height
+		a.initPanes()
+	}
+	// Only esc cancels — don't intercept 'q' so it can be typed in fields
 	if keyMsg, ok := msg.(tea.KeyMsg); ok {
-		if key.Matches(keyMsg, keys.Quit) {
+		if keyMsg.Type == tea.KeyEscape {
 			a.state = viewList
 			return a, nil
 		}
@@ -526,26 +566,41 @@ func (a *App) fetchBoardsForWorkspace() tea.Msg {
 }
 
 func (a *App) listenWS() tea.Msg {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	c, _, err := websocket.Dial(ctx, wsURL(a.serverURL), nil)
-	if err != nil {
-		return errMsg(err)
-	}
-	defer c.Close(websocket.StatusNormalClosure, "")
+	backoff := time.Second
+	maxBackoff := 30 * time.Second
 
-	// Read with a long-lived context (not the dial timeout)
-	readCtx := context.Background()
 	for {
-		_, data, err := c.Read(readCtx)
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		c, _, err := websocket.Dial(ctx, wsURL(a.serverURL), nil)
+		cancel()
 		if err != nil {
-			return errMsg(err)
+			time.Sleep(backoff)
+			backoff *= 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+			continue
 		}
-		var ev map[string]string
-		json.Unmarshal(data, &ev)
-		if ev["event"] == "ticket_changed" {
-			return wsMsg{}
+
+		// Reset backoff on successful connection
+		backoff = time.Second
+
+		// Read with a long-lived context
+		for {
+			_, data, err := c.Read(context.Background())
+			if err != nil {
+				c.Close(websocket.StatusGoingAway, "reconnecting")
+				break // reconnect
+			}
+			var ev map[string]string
+			json.Unmarshal(data, &ev)
+			if ev["event"] == "ticket_changed" {
+				return wsMsg{}
+			}
 		}
+
+		// Connection dropped — retry after backoff
+		time.Sleep(backoff)
 	}
 }
 

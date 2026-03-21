@@ -2,8 +2,11 @@ package tui
 
 import (
 	"raptor/model"
+	"strings"
 
+	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // Vibrant palette (Dracula-inspired but more lively)
@@ -33,7 +36,7 @@ func StatusColor(s model.Status) lipgloss.Color {
 	case model.InProgress:
 		return colorCyan
 	case model.Done:
-		return colorGreen
+		return colorComment
 	default:
 		// Cycle through palette based on status name hash
 		h := 0
@@ -66,6 +69,80 @@ func StatusStar(s model.Status) string {
 	default:
 		return "⭐"
 	}
+}
+
+// overlayOnBackground renders content inside a centered floating box
+// composited on top of the background string so the background remains visible.
+// Uses charmbracelet/x/ansi for ANSI-safe string slicing to preserve escape
+// sequences in the background on both sides of the overlay.
+func overlayOnBackground(content string, boxW, boxH int, bg string, termW, termH int) string {
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(colorPurple).
+		Background(colorBg).
+		Foreground(colorFg).
+		Width(boxW).
+		Height(boxH).
+		Padding(1, 2).
+		Render(content)
+
+	boxLines := strings.Split(box, "\n")
+	bgLines := strings.Split(bg, "\n")
+
+	// Pad background to fill terminal height
+	for len(bgLines) < termH {
+		bgLines = append(bgLines, strings.Repeat(" ", termW))
+	}
+
+	// Compute centered position
+	boxRenderedH := len(boxLines)
+	boxRenderedW := lipgloss.Width(box)
+	startY := (termH - boxRenderedH) / 2
+	startX := (termW - boxRenderedW) / 2
+	if startY < 0 {
+		startY = 0
+	}
+	if startX < 0 {
+		startX = 0
+	}
+
+	// Composite: splice each overlay line into the background using ANSI-safe cuts
+	for i, overlayLine := range boxLines {
+		bgIdx := startY + i
+		if bgIdx >= len(bgLines) {
+			break
+		}
+		bgLine := bgLines[bgIdx]
+		overlayW := lipgloss.Width(overlayLine)
+
+		// Left: keep the first startX columns of the background (ANSI-safe)
+		left := ansi.Truncate(bgLine, startX, "")
+		// Pad left to exactly startX columns in case bg line is shorter
+		leftW := lipgloss.Width(left)
+		if leftW < startX {
+			left += strings.Repeat(" ", startX-leftW)
+		}
+
+		// Right: keep everything after startX+overlayW columns (ANSI-safe)
+		right := ansi.TruncateLeft(bgLine, startX+overlayW, "")
+
+		bgLines[bgIdx] = left + overlayLine + right
+	}
+
+	return strings.Join(bgLines[:termH], "\n")
+}
+
+// createFormTheme returns a Dracula-based huh theme with field widths fixed.
+//
+// huh has a bug: Input.View() calls styles.Base.Width(i.width).Render(...)
+// but Text.View() calls styles.Base.Render(...) WITHOUT setting Width.
+// To work around this, we bake the form width into both Focused.Base and
+// Blurred.Base so Text fields also render at the correct width.
+func createFormTheme() *huh.Theme {
+	t := huh.ThemeDracula()
+	t.Focused.Base = t.Focused.Base.Width(createFormW)
+	t.Blurred.Base = t.Blurred.Base.Width(createFormW)
+	return t
 }
 
 // Pane styles
