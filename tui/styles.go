@@ -33,7 +33,7 @@ func StatusColor(s model.Status) lipgloss.Color {
 	case model.InProgress:
 		return colorCyan
 	case model.Done:
-		return colorGreen
+		return colorComment
 	default:
 		// Cycle through palette based on status name hash
 		h := 0

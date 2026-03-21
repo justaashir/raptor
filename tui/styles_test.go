@@ -14,7 +14,7 @@ func TestStatusColor_ReturnsCorrectColors(t *testing.T) {
 	}{
 		{model.Todo, colorOrange},
 		{model.InProgress, colorCyan},
-		{model.Done, colorGreen},
+		{model.Done, colorComment},
 	}
 	for _, tt := range tests {
 		got := StatusColor(tt.status)
