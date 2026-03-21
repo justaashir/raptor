@@ -119,8 +119,11 @@ func (a *App) toggleFocus() {
 // Bubble Tea interface
 
 func (a *App) Init() tea.Cmd {
-	if a.workspace == "" || a.board == "" {
-		return a.fetchBoards
+	if a.workspace == "" {
+		return a.fetchWorkspaces
+	}
+	if a.board == "" {
+		return a.fetchBoardsForWorkspace
 	}
 	return tea.Batch(a.fetchTickets, a.listenWS)
 }
@@ -139,6 +142,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, tea.Batch(a.fetchTickets, a.listenWS)
 
 	case workspacesMsg:
+		if len(msg.workspaces) == 1 {
+			a.workspace = msg.workspaces[0].ID
+			a.wsName = msg.workspaces[0].Name
+			return a, a.fetchBoardsForWorkspace
+		}
 		a.wsChoices = msg.workspaces
 		a.wsCursor = 0
 		a.state = viewWorkspaceSelect
@@ -241,7 +249,10 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return a, a.fetchTickets
 
 	case key.Matches(msg, keys.SwitchBoard):
-		return a, a.fetchBoards
+		return a, a.fetchBoardsForWorkspace
+
+	case key.Matches(msg, keys.SwitchWorkspace):
+		return a, a.fetchWorkspaces
 
 	default:
 		// Delegate to focused pane — list handles j/k, /, pgup/pgdn
@@ -362,43 +373,16 @@ func (a *App) fetchTickets() tea.Msg {
 	return ticketsMsg(resp)
 }
 
-func (a *App) fetchBoards() tea.Msg {
+func (a *App) fetchWorkspaces() tea.Msg {
 	c := client.New(a.serverURL, a.token)
-
 	workspaces, err := c.ListWorkspaces()
 	if err != nil {
 		return errMsg(err)
 	}
-
 	if len(workspaces) == 0 {
 		return errMsg(fmt.Errorf("no workspaces found"))
 	}
-
-	ws := workspaces[0]
-	if a.workspace != "" {
-		for _, w := range workspaces {
-			if w.ID == a.workspace {
-				ws = w
-				break
-			}
-		}
-	}
-
-	boards, err := c.ListBoards(ws.ID)
-	if err != nil {
-		return errMsg(err)
-	}
-
-	if len(workspaces) == 1 && len(boards) == 1 {
-		a.workspace = ws.ID
-		a.wsName = ws.Name
-		a.board = boards[0].ID
-		a.boardName = boards[0].Name
-		a.state = viewList
-		return a.fetchTickets()
-	}
-
-	return boardsMsg{boards: boards, workspace: ws.Name}
+	return workspacesMsg{workspaces: workspaces}
 }
 
 func (a *App) fetchBoardsForWorkspace() tea.Msg {
@@ -443,8 +427,9 @@ type keyMap struct {
 	Refresh     key.Binding
 	Quit        key.Binding
 	Back        key.Binding
-	SwitchBoard key.Binding
-	Tab         key.Binding
+	SwitchBoard     key.Binding
+	SwitchWorkspace key.Binding
+	Tab             key.Binding
 }
 
 var keys = keyMap{
@@ -454,6 +439,7 @@ var keys = keyMap{
 	Refresh:     key.NewBinding(key.WithKeys("r")),
 	Quit:        key.NewBinding(key.WithKeys("q", "ctrl+c")),
 	Back:        key.NewBinding(key.WithKeys("esc")),
-	SwitchBoard: key.NewBinding(key.WithKeys("b")),
-	Tab:         key.NewBinding(key.WithKeys("tab")),
+	SwitchBoard:     key.NewBinding(key.WithKeys("b")),
+	SwitchWorkspace: key.NewBinding(key.WithKeys("w")),
+	Tab:             key.NewBinding(key.WithKeys("tab")),
 }

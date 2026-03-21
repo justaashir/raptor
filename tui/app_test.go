@@ -180,6 +180,41 @@ func TestApp_WorkspaceSelector_EnterSetsWorkspaceAndFetchesBoards(t *testing.T) 
 	}
 }
 
+func TestApp_PressW_FromListView_FetchesWorkspaces(t *testing.T) {
+	app := NewApp("http://localhost:8080", "tok", "ws1", "b1")
+	app.state = viewList
+	app.width = 120
+	app.height = 40
+	app.initPanes()
+
+	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
+	if cmd == nil {
+		t.Fatal("expected a command to fetch workspaces when pressing 'w'")
+	}
+}
+
+func TestApp_SingleWorkspace_AutoSelectsAndShowsBoardSelector(t *testing.T) {
+	app := NewApp("http://localhost:8080", "", "", "")
+	// Simulate receiving a workspacesMsg with only 1 workspace
+	msg := workspacesMsg{
+		workspaces: []model.Workspace{
+			{ID: "ws1", Name: "Only Workspace"},
+		},
+	}
+	app.Update(msg)
+	// Should auto-select the workspace and NOT show workspace selector
+	if app.workspace != "ws1" {
+		t.Fatalf("expected workspace auto-selected to 'ws1', got '%s'", app.workspace)
+	}
+	if app.wsName != "Only Workspace" {
+		t.Fatalf("expected wsName 'Only Workspace', got '%s'", app.wsName)
+	}
+	// Should NOT be in workspace select state
+	if app.state == viewWorkspaceSelect {
+		t.Fatal("should not show workspace selector when only 1 workspace")
+	}
+}
+
 func TestApp_AllTickets_StoredForStatusBar(t *testing.T) {
 	app := NewApp("http://localhost:8080", "", "", "")
 	app.width = 120
