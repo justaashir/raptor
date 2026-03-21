@@ -354,6 +354,11 @@ func (s *Server) updateBoard(c echo.Context) error {
 		fields["name"] = *input.Name
 	}
 	if len(input.Statuses) > 0 {
+		for _, st := range input.Statuses {
+			if st == "" || strings.ContainsAny(st, ", ") {
+				return jsonErr(c, http.StatusBadRequest, "invalid status name: must be non-empty with no commas or spaces")
+			}
+		}
 		fields["statuses"] = strings.Join(input.Statuses, ",")
 	}
 	if len(fields) == 0 {
