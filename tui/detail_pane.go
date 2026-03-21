@@ -33,9 +33,9 @@ func NewDetailPane(width, height int) *DetailPane {
 	}
 }
 
-func sp(s string) *string { return &s }
-func bp(b bool) *bool     { return &b }
-func up(u uint) *uint     { return &u }
+func strPtr(s string) *string { return &s }
+func boolPtr(b bool) *bool     { return &b }
+func uintPtr(u uint) *uint     { return &u }
 
 // raptorStyle builds a glamour StyleConfig matching the Dracula palette,
 // modelled after beads_viewer's buildStyleFromTheme.
@@ -52,50 +52,50 @@ func raptorStyle() ansi.StyleConfig {
 
 	return ansi.StyleConfig{
 		Document: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{Color: sp(fg)},
-			Margin:         up(0),
+			StylePrimitive: ansi.StylePrimitive{Color: strPtr(fg)},
+			Margin:         uintPtr(0),
 		},
 		Paragraph: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{Color: sp(fg)},
-			Margin:         up(0),
+			StylePrimitive: ansi.StylePrimitive{Color: strPtr(fg)},
+			Margin:         uintPtr(0),
 		},
 		Heading: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{Color: sp(purple), Bold: bp(true)},
-			Margin:         up(0),
+			StylePrimitive: ansi.StylePrimitive{Color: strPtr(purple), Bold: boolPtr(true)},
+			Margin:         uintPtr(0),
 		},
 		H1: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{Color: sp(purple), Bold: bp(true), BlockSuffix: "\n"},
-			Margin:         up(0),
+			StylePrimitive: ansi.StylePrimitive{Color: strPtr(purple), Bold: boolPtr(true), BlockSuffix: "\n"},
+			Margin:         uintPtr(0),
 		},
 		H2: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{Color: sp(pink), Bold: bp(true)},
-			Margin:         up(0),
+			StylePrimitive: ansi.StylePrimitive{Color: strPtr(pink), Bold: boolPtr(true)},
+			Margin:         uintPtr(0),
 		},
 		H3: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{Color: sp(cyan), Bold: bp(true)},
-			Margin:         up(0),
+			StylePrimitive: ansi.StylePrimitive{Color: strPtr(cyan), Bold: boolPtr(true)},
+			Margin:         uintPtr(0),
 		},
 		H4: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{Color: sp(orange), Bold: bp(true)},
-			Margin:         up(0),
+			StylePrimitive: ansi.StylePrimitive{Color: strPtr(orange), Bold: boolPtr(true)},
+			Margin:         uintPtr(0),
 		},
 		Strong: ansi.StylePrimitive{
-			Color: sp(orange),
-			Bold:  bp(true),
+			Color: strPtr(orange),
+			Bold:  boolPtr(true),
 		},
 		Emph: ansi.StylePrimitive{
-			Color:  sp(yellow),
-			Italic: bp(true),
+			Color:  strPtr(yellow),
+			Italic: boolPtr(true),
 		},
 		BlockQuote: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{Color: sp(comment), Italic: bp(true)},
-			Indent:         up(2),
-			Margin:         up(0),
+			StylePrimitive: ansi.StylePrimitive{Color: strPtr(comment), Italic: boolPtr(true)},
+			Indent:         uintPtr(2),
+			Margin:         uintPtr(0),
 		},
 		List: ansi.StyleList{
 			StyleBlock: ansi.StyleBlock{
-				StylePrimitive: ansi.StylePrimitive{Color: sp(fg)},
-				Margin:         up(0),
+				StylePrimitive: ansi.StylePrimitive{Color: strPtr(fg)},
+				Margin:         uintPtr(0),
 			},
 			LevelIndent: 2,
 		},
@@ -103,44 +103,44 @@ func raptorStyle() ansi.StyleConfig {
 			BlockPrefix: "• ",
 		},
 		Link: ansi.StylePrimitive{
-			Color:     sp(cyan),
-			Underline: bp(true),
+			Color:     strPtr(cyan),
+			Underline: boolPtr(true),
 		},
 		LinkText: ansi.StylePrimitive{
-			Color: sp(purple),
+			Color: strPtr(purple),
 		},
 		Code: ansi.StyleBlock{
-			StylePrimitive: ansi.StylePrimitive{Color: sp(green)},
+			StylePrimitive: ansi.StylePrimitive{Color: strPtr(green)},
 		},
 		CodeBlock: ansi.StyleCodeBlock{
 			StyleBlock: ansi.StyleBlock{
-				StylePrimitive: ansi.StylePrimitive{Color: sp(green)},
-				Margin:         up(0),
+				StylePrimitive: ansi.StylePrimitive{Color: strPtr(green)},
+				Margin:         uintPtr(0),
 			},
 			Chroma: &ansi.Chroma{
-				Text:    ansi.StylePrimitive{Color: sp(fg)},
-				Keyword: ansi.StylePrimitive{Color: sp(purple)},
-				Name:    ansi.StylePrimitive{Color: sp(cyan)},
-				Comment: ansi.StylePrimitive{Color: sp(comment), Italic: bp(true)},
-				LiteralString: ansi.StylePrimitive{Color: sp(yellow)},
-				LiteralNumber: ansi.StylePrimitive{Color: sp(purple)},
+				Text:    ansi.StylePrimitive{Color: strPtr(fg)},
+				Keyword: ansi.StylePrimitive{Color: strPtr(purple)},
+				Name:    ansi.StylePrimitive{Color: strPtr(cyan)},
+				Comment: ansi.StylePrimitive{Color: strPtr(comment), Italic: boolPtr(true)},
+				LiteralString: ansi.StylePrimitive{Color: strPtr(yellow)},
+				LiteralNumber: ansi.StylePrimitive{Color: strPtr(purple)},
 			},
 		},
 		HorizontalRule: ansi.StylePrimitive{
-			Color:  sp(comment),
+			Color:  strPtr(comment),
 			Format: "─────────────────────────────────────────",
 		},
 		Table: ansi.StyleTable{
 			StyleBlock: ansi.StyleBlock{
 				StylePrimitive: ansi.StylePrimitive{
-					Color:           sp(fg),
-					BackgroundColor: sp(tableBg),
+					Color:           strPtr(fg),
+					BackgroundColor: strPtr(tableBg),
 				},
-				Margin: up(0),
+				Margin: uintPtr(0),
 			},
-			CenterSeparator: sp("┼"),
-			ColumnSeparator: sp("│"),
-			RowSeparator:    sp("─"),
+			CenterSeparator: strPtr("┼"),
+			ColumnSeparator: strPtr("│"),
+			RowSeparator:    strPtr("─"),
 		},
 	}
 }
