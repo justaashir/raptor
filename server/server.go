@@ -106,15 +106,14 @@ func username(c echo.Context) string {
 func (s *Server) authorize(c echo.Context, workspaceID, minRole string) error {
 	u := username(c)
 	if u == "" {
-		return errors.New("unauthorized")
+		return errors.New("forbidden")
 	}
 	role, err := s.db.GetMemberRole(workspaceID, u)
 	if err != nil {
-		return errors.New("not a workspace member")
+		return errors.New("forbidden")
 	}
-
 	if roleLevels[role] < roleLevels[minRole] {
-		return errors.New("insufficient permissions")
+		return errors.New("forbidden")
 	}
 	return nil
 }
@@ -123,6 +122,23 @@ var roleLevels = map[string]int{"owner": 2, "member": 1}
 
 func genID() string {
 	return uuid.New().String()[:12]
+}
+
+var errHandled = errors.New("handled")
+
+func (s *Server) requireBoard(c echo.Context) (model.Board, error) {
+	wid := c.Param("wid")
+	bid := c.Param("bid")
+	board, err := s.db.GetBoard(bid)
+	if err != nil {
+		jsonErr(c, http.StatusNotFound, "board not found")
+		return model.Board{}, errHandled
+	}
+	if board.WorkspaceID != wid {
+		jsonErr(c, http.StatusNotFound, "board not found")
+		return model.Board{}, errHandled
+	}
+	return board, nil
 }
 
 // --- WebSocket (stays raw, Echo doesn't wrap WS well) ---
@@ -281,16 +297,12 @@ func (s *Server) listBoards(c echo.Context) error {
 
 func (s *Server) getBoard(c echo.Context) error {
 	wid := c.Param("wid")
-	bid := c.Param("bid")
 	if err := s.authorize(c, wid, "member"); err != nil {
 		return jsonErr(c, http.StatusForbidden, err.Error())
 	}
-	board, err := s.db.GetBoard(bid)
+	board, err := s.requireBoard(c)
 	if err != nil {
-		return jsonErr(c, http.StatusNotFound, "board not found")
-	}
-	if board.WorkspaceID != wid {
-		return jsonErr(c, http.StatusNotFound, "board not found")
+		return nil
 	}
 	return c.JSON(http.StatusOK, board)
 }
@@ -335,12 +347,9 @@ func (s *Server) updateBoard(c echo.Context) error {
 	if err := s.authorize(c, wid, "owner"); err != nil {
 		return jsonErr(c, http.StatusForbidden, err.Error())
 	}
-	board, err := s.db.GetBoard(bid)
+	_, err := s.requireBoard(c)
 	if err != nil {
-		return jsonErr(c, http.StatusNotFound, "board not found")
-	}
-	if board.WorkspaceID != wid {
-		return jsonErr(c, http.StatusNotFound, "board not found")
+		return nil
 	}
 	var input struct {
 		Name     *string  `json:"name"`
@@ -354,6 +363,11 @@ func (s *Server) updateBoard(c echo.Context) error {
 		fields["name"] = *input.Name
 	}
 	if len(input.Statuses) > 0 {
+		for _, st := range input.Statuses {
+			if st == "" || strings.ContainsAny(st, ", ") {
+				return jsonErr(c, http.StatusBadRequest, "invalid status name: must be non-empty with no commas or spaces")
+			}
+		}
 		fields["statuses"] = strings.Join(input.Statuses, ",")
 	}
 	if len(fields) == 0 {
@@ -375,12 +389,8 @@ func (s *Server) deleteBoard(c echo.Context) error {
 	if err := s.authorize(c, wid, "owner"); err != nil {
 		return jsonErr(c, http.StatusForbidden, err.Error())
 	}
-	board, err := s.db.GetBoard(bid)
-	if err != nil {
-		return jsonErr(c, http.StatusNotFound, "board not found")
-	}
-	if board.WorkspaceID != wid {
-		return jsonErr(c, http.StatusNotFound, "board not found")
+	if _, err := s.requireBoard(c); err != nil {
+		return nil
 	}
 	if err := s.db.DeleteBoard(bid); err != nil {
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")
@@ -494,13 +504,13 @@ func (s *Server) getTicket(c echo.Context) error {
 	}
 	ticket, err := s.db.GetTicket(tid)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return c.String(http.StatusNotFound, "not found")
+		return jsonErr(c, http.StatusNotFound, "not found")
 	}
 	if err != nil {
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
 	if ticket.BoardID != bid {
-		return c.String(http.StatusNotFound, "not found")
+		return jsonErr(c, http.StatusNotFound, "not found")
 	}
 	return c.JSON(http.StatusOK, ticket)
 }

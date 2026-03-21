@@ -28,6 +28,7 @@ const (
 type App struct {
 	serverURL  string
 	token      string
+	apiClient  *client.Client
 	workspace  string
 	board      string
 	boardName  string
@@ -70,6 +71,7 @@ func NewApp(serverURL, token, workspace, board string) *App {
 	return &App{
 		serverURL:  serverURL,
 		token:      token,
+		apiClient:  client.NewScoped(serverURL, token, workspace, board),
 		workspace:  workspace,
 		board:      board,
 		cachePath:  DefaultCachePath(),
@@ -77,6 +79,18 @@ func NewApp(serverURL, token, workspace, board string) *App {
 		listPane:   NewListPane(40, 20),
 		detailPane: NewDetailPane(60, 20),
 	}
+}
+
+func (a *App) refreshClient() {
+	a.apiClient = client.NewScoped(a.serverURL, a.token, a.workspace, a.board)
+}
+
+// wsURL converts an HTTP server URL to a WebSocket URL.
+func wsURL(serverURL string) string {
+	if strings.HasPrefix(serverURL, "https://") {
+		return "wss://" + strings.TrimPrefix(serverURL, "https://") + "/ws"
+	}
+	return "ws://" + strings.TrimPrefix(serverURL, "http://") + "/ws"
 }
 
 func (a *App) initPanes() {
@@ -169,6 +183,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(msg.workspaces) == 1 {
 			a.workspace = msg.workspaces[0].ID
 			a.wsName = msg.workspaces[0].Name
+			a.refreshClient()
 			return a, a.fetchBoardsForWorkspace
 		}
 		a.wsChoices = msg.workspaces
@@ -182,6 +197,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.boardName = msg.boards[0].Name
 			a.workspace = msg.boards[0].WorkspaceID
 			a.wsName = msg.workspace
+			a.refreshClient()
 			a.state = viewList
 			if a.cachePath != "" {
 				if cached, _ := LoadTicketCache(a.cachePath, a.board); len(cached) > 0 {
@@ -233,6 +249,7 @@ func (a *App) updateWorkspaceSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			selected := a.wsChoices[a.wsCursor]
 			a.workspace = selected.ID
 			a.wsName = selected.Name
+			a.refreshClient()
 			return a, a.fetchBoardsForWorkspace
 		}
 	}
@@ -262,6 +279,7 @@ func (a *App) updateBoardSelect(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.board = selected.ID
 			a.boardName = selected.Name
 			a.workspace = selected.WorkspaceID
+			a.refreshClient()
 			a.state = viewList
 			if a.cachePath != "" {
 				if cached, _ := LoadTicketCache(a.cachePath, a.board); len(cached) > 0 {
@@ -373,7 +391,7 @@ func (a *App) View() string {
 		Render(a.detailPane.View())
 
 	panes := lipgloss.JoinHorizontal(lipgloss.Top, listView, detailView)
-	statusBar := RenderStatusBar(a.tickets, a.boardName, a.focused, a.width)
+	statusBar := RenderStatusBar(a.tickets, a.boardName, a.width)
 
 	if a.err != nil {
 		errStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
@@ -425,8 +443,7 @@ func (a *App) viewBoardSelector() string {
 // Commands
 
 func (a *App) fetchTickets() tea.Msg {
-	c := client.NewScoped(a.serverURL, a.token, a.workspace, a.board)
-	resp, err := c.ListTickets(client.ListOptions{})
+	resp, err := a.apiClient.ListTickets(client.ListOptions{})
 	if err != nil {
 		return errMsg(err)
 	}
@@ -480,8 +497,7 @@ func (a *App) updateCreate(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (a *App) submitTicket() tea.Msg {
-	c := client.NewScoped(a.serverURL, a.token, a.workspace, a.board)
-	_, err := c.CreateTicket(a.newTitle, a.newContent, "")
+	_, err := a.apiClient.CreateTicket(a.newTitle, a.newContent, "")
 	if err != nil {
 		return errMsg(err)
 	}
@@ -512,8 +528,7 @@ func (a *App) fetchBoardsForWorkspace() tea.Msg {
 func (a *App) listenWS() tea.Msg {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	wsURL := strings.Replace(a.serverURL, "http", "ws", 1) + "/ws"
-	c, _, err := websocket.Dial(ctx, wsURL, nil)
+	c, _, err := websocket.Dial(ctx, wsURL(a.serverURL), nil)
 	if err != nil {
 		return errMsg(err)
 	}

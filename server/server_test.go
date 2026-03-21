@@ -873,3 +873,90 @@ func TestServer_AssignNonMember(t *testing.T) {
 		t.Fatalf("update with non-member assignee: expected 400, got %d: %s", w.Code, w.Body.String())
 	}
 }
+
+func TestServer_GetTicket_NotFound_ReturnsJSON(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
+	token := mustToken(t, "alice", "secret")
+	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
+
+	req := httptest.NewRequest("GET", ticketURL(wsID, bdID)+"/nonexistent", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", w.Code)
+	}
+	var errResp map[string]string
+	if err := json.NewDecoder(w.Body).Decode(&errResp); err != nil {
+		t.Fatalf("expected JSON error response, got: %s", w.Body.String())
+	}
+	if errResp["error"] == "" {
+		t.Fatal("expected error field in JSON response")
+	}
+}
+
+func TestServer_UpdateBoard_RejectsInvalidStatuses(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
+	token := mustToken(t, "alice", "secret")
+	wsID, bdID := setupWorkspaceAndBoard(t, srv, token)
+
+	tests := []struct {
+		name     string
+		statuses string
+	}{
+		{"empty status", `{"statuses":["todo","","done"]}`},
+		{"status with comma", `{"statuses":["todo","in,progress"]}`},
+		{"status with space", `{"statuses":["todo","in progress"]}`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("PATCH", "/api/workspaces/"+wsID+"/boards/"+bdID, strings.NewReader(tt.statuses))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Authorization", "Bearer "+token)
+			w := httptest.NewRecorder()
+			srv.ServeHTTP(w, req)
+			if w.Code != http.StatusBadRequest {
+				t.Errorf("expected 400, got %d: %s", w.Code, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestServer_NoSecret_RejectsAuthenticatedRoutes(t *testing.T) {
+	srv := newTestServer(t)
+
+	req := httptest.NewRequest("GET", "/api/workspaces/", nil)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+
+	if w.Code == http.StatusOK {
+		t.Fatal("expected auth rejection when no secret is configured, but got 200")
+	}
+}
+
+func TestServer_Auth_RejectsInvalidUsername(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{})
+
+	tests := []struct {
+		name     string
+		username string
+	}{
+		{"too long", strings.Repeat("a", 40)},
+		{"has spaces", "user name"},
+		{"has special chars", "user<script>"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			body := fmt.Sprintf(`{"username":"%s"}`, tt.username)
+			req := httptest.NewRequest("POST", "/api/auth", strings.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			srv.ServeHTTP(w, req)
+			if w.Code != http.StatusBadRequest {
+				t.Errorf("expected 400 for username %q, got %d", tt.username, w.Code)
+			}
+		})
+	}
+}

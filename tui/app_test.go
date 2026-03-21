@@ -404,3 +404,20 @@ func TestApp_Init_LoadsCachedTickets(t *testing.T) {
 		t.Fatalf("expected %d rows in list, got %d", len(tickets), app.listPane.RowCount())
 	}
 }
+
+func TestWSURL(t *testing.T) {
+	tests := []struct {
+		serverURL string
+		expected  string
+	}{
+		{"http://localhost:8080", "ws://localhost:8080/ws"},
+		{"https://raptor.example.com", "wss://raptor.example.com/ws"},
+		{"http://httpbin.org", "ws://httpbin.org/ws"},
+	}
+	for _, tt := range tests {
+		got := wsURL(tt.serverURL)
+		if got != tt.expected {
+			t.Errorf("wsURL(%q) = %q, want %q", tt.serverURL, got, tt.expected)
+		}
+	}
+}

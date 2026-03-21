@@ -4,12 +4,15 @@ import (
 	"fmt"
 	"net/http"
 	"raptor/model"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
 )
+
+var validUsername = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$`)
 
 const tokenTTL = 30 * 24 * time.Hour
 
@@ -43,7 +46,7 @@ func ValidateToken(tokenStr, secret string) (string, error) {
 func (s *Server) authMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		if s.secret == "" {
-			return next(c)
+			return c.JSON(http.StatusServiceUnavailable, map[string]string{"error": "server not configured for authentication"})
 		}
 
 		auth := c.Request().Header.Get("Authorization")
@@ -69,6 +72,9 @@ func (s *Server) handleAuth(c echo.Context) error {
 	}
 	if input.Username == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "username required"})
+	}
+	if len(input.Username) > 39 || !validUsername.MatchString(input.Username) {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid username"})
 	}
 
 	isMember, _ := s.db.IsWorkspaceMember(input.Username)

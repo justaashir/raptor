@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -48,7 +49,7 @@ var updateCmd = &cobra.Command{
 			return fmt.Errorf("failed to find executable path: %w", err)
 		}
 
-		tmp, err := os.CreateTemp("", "raptor-update-*")
+		tmp, err := os.CreateTemp(filepath.Dir(exe), "raptor-update-*")
 		if err != nil {
 			return fmt.Errorf("failed to create temp file: %w", err)
 		}

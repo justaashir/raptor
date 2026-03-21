@@ -15,7 +15,7 @@ func TestRenderStatusBar_ShowsTicketCounts(t *testing.T) {
 		{ID: "4", Status: model.Done},
 	}
 
-	bar := RenderStatusBar(tickets, "my-board", focusList, 80)
+	bar := RenderStatusBar(tickets, "my-board", 80)
 
 	if !strings.Contains(bar, "2") { // 2 todo
 		t.Fatal("should contain todo count")
@@ -32,7 +32,7 @@ func TestRenderStatusBar_ShowsTicketCounts(t *testing.T) {
 }
 
 func TestRenderStatusBar_ShowsKeybindHints(t *testing.T) {
-	bar := RenderStatusBar(nil, "board", focusList, 80)
+	bar := RenderStatusBar(nil, "board", 80)
 
 	if !strings.Contains(bar, "tab") {
 		t.Fatal("should contain tab hint")
@@ -43,7 +43,7 @@ func TestRenderStatusBar_ShowsKeybindHints(t *testing.T) {
 }
 
 func TestRenderStatusBar_EmptyTickets(t *testing.T) {
-	bar := RenderStatusBar(nil, "board", focusList, 80)
+	bar := RenderStatusBar(nil, "board", 80)
 
 	if !strings.Contains(bar, "0 tickets") {
 		t.Fatalf("should show 0 tickets, got %q", bar)
@@ -69,5 +69,19 @@ func TestCountByStatus(t *testing.T) {
 	}
 	if counts[model.Done] != 1 {
 		t.Fatalf("Done count = %d, want 1", counts[model.Done])
+	}
+}
+
+func TestRenderStatusBar_DeterministicOrder(t *testing.T) {
+	tickets := []model.Ticket{
+		{Status: "zzz"}, {Status: "zzz"},
+		{Status: "aaa"},
+	}
+	first := RenderStatusBar(tickets, "Board", 80)
+	for i := 0; i < 10; i++ {
+		got := RenderStatusBar(tickets, "Board", 80)
+		if got != first {
+			t.Fatalf("render %d differs from first render — non-deterministic ordering", i)
+		}
 	}
 }

@@ -446,6 +446,34 @@ func TestDB_TicketStats_DynamicKeys(t *testing.T) {
 	}
 }
 
+func TestDB_PragmaSettings(t *testing.T) {
+	db, err := NewDB(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	var busyTimeout int
+	db.conn.Raw("PRAGMA busy_timeout").Scan(&busyTimeout)
+	if busyTimeout != 5000 {
+		t.Errorf("expected busy_timeout=5000, got %d", busyTimeout)
+	}
+
+	var syncMode int
+	db.conn.Raw("PRAGMA synchronous").Scan(&syncMode)
+	if syncMode != 1 {
+		t.Errorf("expected synchronous=1 (NORMAL), got %d", syncMode)
+	}
+
+	sqlDB, err := db.conn.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sqlDB.Stats().MaxOpenConnections != 1 {
+		t.Errorf("expected MaxOpenConnections=1, got %d", sqlDB.Stats().MaxOpenConnections)
+	}
+}
+
 func TestDB_AssigneeField(t *testing.T) {
 	db := newTestDB(t)
 	ticket := model.NewTicket("Assigned task", "", "alice")
