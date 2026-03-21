@@ -106,6 +106,31 @@ func TestFormatStatus_CustomStatus(t *testing.T) {
 	}
 }
 
+func TestSortTickets_DoneAtBottom(t *testing.T) {
+	now := time.Now()
+	tickets := []model.Ticket{
+		{ID: "done1", Title: "Done first", Status: model.Done, CreatedAt: now},
+		{ID: "todo1", Title: "Todo", Status: model.Todo, CreatedAt: now},
+		{ID: "done2", Title: "Done second", Status: model.Done, CreatedAt: now},
+		{ID: "prog1", Title: "In progress", Status: model.InProgress, CreatedAt: now},
+	}
+	sorted := SortTicketsForSidebar(tickets)
+	// Non-done tickets should come first
+	if sorted[0].ID != "todo1" {
+		t.Fatalf("sorted[0] = %q, want todo1", sorted[0].ID)
+	}
+	if sorted[1].ID != "prog1" {
+		t.Fatalf("sorted[1] = %q, want prog1", sorted[1].ID)
+	}
+	// Done tickets should come last
+	if sorted[2].ID != "done1" {
+		t.Fatalf("sorted[2] = %q, want done1", sorted[2].ID)
+	}
+	if sorted[3].ID != "done2" {
+		t.Fatalf("sorted[3] = %q, want done2", sorted[3].ID)
+	}
+}
+
 func TestListPane_Filtering(t *testing.T) {
 	lp := NewListPane(80, 20)
 	lp.SetTickets(testTickets())

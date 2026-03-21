@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"raptor/model"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -23,6 +24,22 @@ func FormatStatus(s model.Status) string {
 	default:
 		return string(s)
 	}
+}
+
+// SortTicketsForSidebar returns a copy with done tickets at the bottom,
+// preserving relative order within each group.
+func SortTicketsForSidebar(tickets []model.Ticket) []model.Ticket {
+	result := make([]model.Ticket, len(tickets))
+	copy(result, tickets)
+	sort.SliceStable(result, func(i, j int) bool {
+		iDone := result[i].Status == model.Done
+		jDone := result[j].Status == model.Done
+		if iDone != jDone {
+			return !iDone
+		}
+		return false
+	})
+	return result
 }
 
 // TicketItem wraps a model.Ticket to implement list.Item and list.DefaultItem.
