@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 )
@@ -53,9 +52,7 @@ func TestServer_InstallScript(t *testing.T) {
 }
 
 func TestServerBaseURL_EnvVar(t *testing.T) {
-	// Set SERVER_BASE_URL env var
-	os.Setenv("SERVER_BASE_URL", "https://custom.example.com")
-	defer os.Unsetenv("SERVER_BASE_URL")
+	t.Setenv("SERVER_BASE_URL", "https://custom.example.com")
 
 	req := httptest.NewRequest("GET", "/install.sh", nil)
 	req.Host = "other.example.com"
@@ -67,8 +64,7 @@ func TestServerBaseURL_EnvVar(t *testing.T) {
 }
 
 func TestServerBaseURL_InvalidHost(t *testing.T) {
-	// Ensure env var is not set
-	os.Unsetenv("SERVER_BASE_URL")
+	t.Setenv("SERVER_BASE_URL", "")
 
 	req := httptest.NewRequest("GET", "/install.sh", nil)
 	req.Host = "bad host <script>"
