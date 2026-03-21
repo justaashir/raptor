@@ -397,10 +397,14 @@ func (a *App) View() string {
 
 	if a.state == viewCreate {
 		titleStyle := lipgloss.NewStyle().Bold(true).Foreground(colorCyan)
+		keyStyle := lipgloss.NewStyle().Foreground(colorPurple).Bold(true)
 		helpStyle := lipgloss.NewStyle().Foreground(colorComment)
+		helpLine := keyStyle.Render("enter") + helpStyle.Render(" submit  ") +
+			keyStyle.Render("tab") + helpStyle.Render(" next  ") +
+			keyStyle.Render("q") + helpStyle.Render(" cancel")
 		formContent := titleStyle.Render("  New ticket") + "\n\n" +
 			a.createForm.View() + "\n" +
-			helpStyle.Render("  enter submit  q cancel")
+			"  " + helpLine
 		boxW := 56
 		boxH := 16
 		return OverlayOnBackground(formContent, boxW, boxH, bg, a.width, a.height)
@@ -465,12 +469,14 @@ func (a *App) startCreateForm() tea.Cmd {
 		huh.NewGroup(
 			huh.NewInput().
 				Title("Title").
+				Placeholder("What needs to be done?").
 				Value(&a.newTitle),
 			huh.NewText().
-				Title("Content (markdown)").
+				Title("Content").
+				Placeholder("Details (markdown)...").
 				Value(&a.newContent),
 		),
-	).WithWidth(50).WithShowHelp(true).WithShowErrors(true)
+	).WithWidth(50).WithShowHelp(false).WithShowErrors(true).WithTheme(huh.ThemeDracula())
 	a.state = viewCreate
 	return a.createForm.Init()
 }
