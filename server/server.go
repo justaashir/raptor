@@ -242,6 +242,20 @@ func (s *Server) removeWorkspaceMember(c echo.Context) error {
 	if err := s.authorize(c, wid, "owner"); err != nil {
 		return jsonErr(c, http.StatusForbidden, err.Error())
 	}
+	// Prevent removing the last owner
+	role, err := s.db.GetMemberRole(wid, user)
+	if err != nil {
+		return jsonErr(c, http.StatusNotFound, "member not found")
+	}
+	if role == "owner" {
+		count, err := s.db.CountOwners(wid)
+		if err != nil {
+			return jsonErr(c, http.StatusInternalServerError, "internal server error")
+		}
+		if count <= 1 {
+			return jsonErr(c, http.StatusBadRequest, "cannot remove the last owner")
+		}
+	}
 	if err := s.db.RemoveWorkspaceMember(wid, user); err != nil {
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
@@ -450,6 +464,9 @@ func (s *Server) createTicket(c echo.Context) error {
 	if err != nil {
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
+	if board.WorkspaceID != wid {
+		return jsonErr(c, http.StatusNotFound, "board not found")
+	}
 	statuses := board.StatusList()
 	if len(statuses) > 0 {
 		ticket.Status = model.Status(statuses[0])
@@ -496,6 +513,18 @@ func (s *Server) updateTicket(c echo.Context) error {
 		return jsonErr(c, http.StatusForbidden, err.Error())
 	}
 
+	// Verify ticket exists and belongs to this board
+	existing, err := s.db.GetTicket(tid)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return jsonErr(c, http.StatusNotFound, "not found")
+	}
+	if err != nil {
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
+	}
+	if existing.BoardID != bid {
+		return jsonErr(c, http.StatusNotFound, "not found")
+	}
+
 	var fields map[string]any
 	if err := json.NewDecoder(c.Request().Body).Decode(&fields); err != nil {
 		return c.String(http.StatusBadRequest, "invalid request body")
@@ -515,6 +544,9 @@ func (s *Server) updateTicket(c echo.Context) error {
 		if err != nil {
 			return jsonErr(c, http.StatusInternalServerError, "internal server error")
 		}
+		if board.WorkspaceID != wid {
+			return jsonErr(c, http.StatusNotFound, "board not found")
+		}
 		if !board.ValidStatus(st) {
 			return jsonErr(c, http.StatusBadRequest, "invalid status")
 		}
@@ -530,7 +562,10 @@ func (s *Server) updateTicket(c echo.Context) error {
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
 	s.hub.Broadcast([]byte(`{"event":"ticket_changed"}`))
-	ticket, _ := s.db.GetTicket(tid)
+	ticket, err := s.db.GetTicket(tid)
+	if err != nil {
+		return jsonErr(c, http.StatusInternalServerError, "internal server error")
+	}
 	return c.JSON(http.StatusOK, ticket)
 }
 
