@@ -16,17 +16,12 @@ import (
 	"nhooyr.io/websocket"
 )
 
-// Create modal dimensions: box padding is 2 on each side, and each huh field
-// has a 1-char border on left and right (RoundedBorder). lipgloss Width sets
-// the content width *excluding* borders, so the rendered field width is
-// createFormW + 2 (borders). That total must equal boxW - 2*pad to fill the
-// modal content area edge-to-edge.
+// Create modal dimensions.
 const (
-	createBoxW      = 56
-	createBoxH      = 16
-	createBoxPad    = 2
-	createFieldBord = 2 // left + right border chars on each huh field
-	createFormW     = createBoxW - createBoxPad*2 - createFieldBord
+	createBoxW  = 56
+	createBoxH  = 16
+	createBoxPad = 2
+	createFormW = createBoxW - createBoxPad*2
 )
 
 type viewState int

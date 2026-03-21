@@ -132,19 +132,11 @@ func OverlayOnBackground(content string, boxW, boxH int, bg string, termW, termH
 	return strings.Join(bgLines[:termH], "\n")
 }
 
-// createFormTheme returns a Dracula-based huh theme with rounded field borders.
-// Note: huh's Text field doesn't apply Width on its Base style in View()
-// (unlike Input which does), so we bake the width into the Base style directly.
+// createFormTheme returns a Dracula-based huh theme.
+// Uses the default left-accent bar style (which huh handles correctly for
+// all field types) with Dracula colors.
 func createFormTheme() *huh.Theme {
 	t := huh.ThemeDracula()
-	purple := lipgloss.AdaptiveColor{Dark: "#bd93f9"}
-	muted := lipgloss.AdaptiveColor{Dark: "#44475a"}
-	roundedBase := lipgloss.NewStyle().
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderLeft(true).BorderRight(true).BorderTop(true).BorderBottom(true).
-		Width(createFormW)
-	t.Focused.Base = roundedBase.BorderForeground(purple)
-	t.Blurred.Base = roundedBase.BorderForeground(muted)
 	return t
 }
 
