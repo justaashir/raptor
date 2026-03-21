@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // Vibrant palette (Dracula-inspired but more lively)
@@ -71,6 +72,8 @@ func StatusStar(s model.Status) string {
 
 // OverlayOnBackground renders content inside a centered floating box
 // composited on top of the background string so the background remains visible.
+// Uses charmbracelet/x/ansi for ANSI-safe string slicing to preserve escape
+// sequences in the background on both sides of the overlay.
 func OverlayOnBackground(content string, boxW, boxH int, bg string, termW, termH int) string {
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -87,31 +90,42 @@ func OverlayOnBackground(content string, boxW, boxH int, bg string, termW, termH
 
 	// Pad background to fill terminal height
 	for len(bgLines) < termH {
-		bgLines = append(bgLines, "")
+		bgLines = append(bgLines, strings.Repeat(" ", termW))
 	}
 
-	// Compute centered vertical position
+	// Compute centered position
 	boxRenderedH := len(boxLines)
+	boxRenderedW := lipgloss.Width(box)
 	startY := (termH - boxRenderedH) / 2
+	startX := (termW - boxRenderedW) / 2
 	if startY < 0 {
 		startY = 0
 	}
-
-	// Center horizontally using lipgloss.Place on each box line
-	boxRenderedW := lipgloss.Width(box)
-	startX := (termW - boxRenderedW) / 2
 	if startX < 0 {
 		startX = 0
 	}
-	pad := strings.Repeat(" ", startX)
 
-	// Replace background lines in the overlay region
-	for i, bLine := range boxLines {
+	// Composite: splice each overlay line into the background using ANSI-safe cuts
+	for i, overlayLine := range boxLines {
 		bgIdx := startY + i
 		if bgIdx >= len(bgLines) {
 			break
 		}
-		bgLines[bgIdx] = pad + bLine
+		bgLine := bgLines[bgIdx]
+		overlayW := lipgloss.Width(overlayLine)
+
+		// Left: keep the first startX columns of the background (ANSI-safe)
+		left := ansi.Truncate(bgLine, startX, "")
+		// Pad left to exactly startX columns in case bg line is shorter
+		leftW := lipgloss.Width(left)
+		if leftW < startX {
+			left += strings.Repeat(" ", startX-leftW)
+		}
+
+		// Right: keep everything after startX+overlayW columns (ANSI-safe)
+		right := ansi.TruncateLeft(bgLine, startX+overlayW, "")
+
+		bgLines[bgIdx] = left + overlayLine + right
 	}
 
 	return strings.Join(bgLines[:termH], "\n")

@@ -69,6 +69,25 @@ func TestOverlayOnBackground_PreservesBackground(t *testing.T) {
 	}
 }
 
+func TestOverlayOnBackground_NoAnsiArtifacts(t *testing.T) {
+	bg := strings.Repeat("BACKGROUND LINE HERE AND MORE TEXT PADDING\n", 24)
+	result := OverlayOnBackground("test", 20, 3, bg, 80, 24)
+	// Should not contain broken ANSI sequences
+	if strings.Contains(result, ";163m") || strings.Contains(result, ";113") {
+		t.Fatalf("overlay should not have broken ANSI sequences, got:\n%s", result)
+	}
+	// Should have background content both above/below and alongside the overlay
+	lines := strings.Split(result, "\n")
+	// First line should be fully background (above overlay)
+	if !strings.Contains(lines[0], "BACKGROUND") {
+		t.Fatalf("first line should be background, got: %q", lines[0])
+	}
+	// Last line should be fully background (below overlay)
+	if !strings.Contains(lines[len(lines)-1], "BACKGROUND") {
+		t.Fatalf("last line should be background, got: %q", lines[len(lines)-1])
+	}
+}
+
 func TestStatusIcon_ReturnsCorrectIcons(t *testing.T) {
 	tests := []struct {
 		status model.Status
