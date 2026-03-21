@@ -2,6 +2,7 @@ package tui
 
 import (
 	"raptor/model"
+	"strings"
 	"testing"
 	"time"
 )
@@ -98,6 +99,26 @@ func TestApp_WorkspacesMsg_TransitionsToWorkspaceSelect(t *testing.T) {
 	}
 	if len(app.wsChoices) != 2 {
 		t.Fatalf("expected 2 workspace choices, got %d", len(app.wsChoices))
+	}
+}
+
+func TestApp_WorkspaceSelector_ShowsWorkspaceNames(t *testing.T) {
+	app := NewApp("http://localhost:8080", "", "", "")
+	app.state = viewWorkspaceSelect
+	app.wsChoices = []model.Workspace{
+		{ID: "ws1", Name: "Team Alpha"},
+		{ID: "ws2", Name: "Team Beta"},
+	}
+	app.wsCursor = 0
+	view := app.View()
+	if !strings.Contains(view, "Select a workspace") {
+		t.Fatal("should show 'Select a workspace' title")
+	}
+	if !strings.Contains(view, "Team Alpha") {
+		t.Fatal("should show workspace name 'Team Alpha'")
+	}
+	if !strings.Contains(view, "Team Beta") {
+		t.Fatal("should show workspace name 'Team Beta'")
 	}
 }
 

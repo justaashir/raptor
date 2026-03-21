@@ -237,6 +237,10 @@ func (a *App) View() string {
 		return ""
 	}
 
+	if a.state == viewWorkspaceSelect {
+		return a.viewWorkspaceSelector()
+	}
+
 	if a.state == viewBoardSelect {
 		return a.viewBoardSelector()
 	}
@@ -281,6 +285,25 @@ func (a *App) View() string {
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, header, panes, statusBar)
+}
+
+func (a *App) viewWorkspaceSelector() string {
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("14"))
+	s := titleStyle.Render("Select a workspace") + "\n\n"
+
+	if len(a.wsChoices) == 0 {
+		return s + "No workspaces found. Create one with 'raptor workspace create'.\n\nPress q to quit."
+	}
+
+	for i, w := range a.wsChoices {
+		cursor := "  "
+		if i == a.wsCursor {
+			cursor = "> "
+		}
+		s += fmt.Sprintf("%s%s\n", cursor, w.Name)
+	}
+	s += "\n↑/↓ navigate • enter select • q quit"
+	return s
 }
 
 func (a *App) viewBoardSelector() string {
