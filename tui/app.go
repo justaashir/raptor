@@ -20,6 +20,7 @@ type viewState int
 const (
 	viewList viewState = iota
 	viewBoardSelect
+	viewWorkspaceSelect
 )
 
 type App struct {
@@ -41,6 +42,9 @@ type App struct {
 	// Board selector state
 	boardChoices []model.Board
 	boardCursor  int
+	// Workspace selector state
+	wsChoices []model.Workspace
+	wsCursor  int
 }
 
 type ticketsMsg []model.Ticket
@@ -49,6 +53,9 @@ type wsMsg struct{}
 type boardsMsg struct {
 	boards    []model.Board
 	workspace string
+}
+type workspacesMsg struct {
+	workspaces []model.Workspace
 }
 
 func NewApp(serverURL, token, workspace, board string) *App {
@@ -130,6 +137,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case wsMsg:
 		return a, tea.Batch(a.fetchTickets, a.listenWS)
+
+	case workspacesMsg:
+		a.wsChoices = msg.workspaces
+		a.wsCursor = 0
+		a.state = viewWorkspaceSelect
+		return a, nil
 
 	case boardsMsg:
 		a.boardChoices = msg.boards

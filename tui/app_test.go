@@ -84,6 +84,23 @@ func TestApp_SelectedTicket_NilWhenEmpty(t *testing.T) {
 	}
 }
 
+func TestApp_WorkspacesMsg_TransitionsToWorkspaceSelect(t *testing.T) {
+	app := NewApp("http://localhost:8080", "", "", "")
+	msg := workspacesMsg{
+		workspaces: []model.Workspace{
+			{ID: "ws1", Name: "Team Alpha"},
+			{ID: "ws2", Name: "Team Beta"},
+		},
+	}
+	app.Update(msg)
+	if app.state != viewWorkspaceSelect {
+		t.Fatalf("expected viewWorkspaceSelect, got %d", app.state)
+	}
+	if len(app.wsChoices) != 2 {
+		t.Fatalf("expected 2 workspace choices, got %d", len(app.wsChoices))
+	}
+}
+
 func TestApp_AllTickets_StoredForStatusBar(t *testing.T) {
 	app := NewApp("http://localhost:8080", "", "", "")
 	app.width = 120
