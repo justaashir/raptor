@@ -71,11 +71,11 @@ func StatusStar(s model.Status) string {
 	}
 }
 
-// OverlayOnBackground renders content inside a centered floating box
+// overlayOnBackground renders content inside a centered floating box
 // composited on top of the background string so the background remains visible.
 // Uses charmbracelet/x/ansi for ANSI-safe string slicing to preserve escape
 // sequences in the background on both sides of the overlay.
-func OverlayOnBackground(content string, boxW, boxH int, bg string, termW, termH int) string {
+func overlayOnBackground(content string, boxW, boxH int, bg string, termW, termH int) string {
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(colorPurple).

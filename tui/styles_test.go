@@ -43,35 +43,35 @@ func TestStatusColor_ReturnsCorrectColors(t *testing.T) {
 	}
 }
 
-func TestOverlayOnBackground_ContainsContent(t *testing.T) {
+func TestOverlay_ContainsContent(t *testing.T) {
 	bg := strings.Repeat("BACKGROUND LINE\n", 24)
 	content := "Hello World"
-	result := OverlayOnBackground(content, 30, 10, bg, 80, 24)
+	result := overlayOnBackground(content, 30, 10, bg, 80, 24)
 	if !strings.Contains(result, "Hello World") {
 		t.Fatalf("overlay should contain content, got:\n%s", result)
 	}
 }
 
-func TestOverlayOnBackground_HasBorder(t *testing.T) {
+func TestOverlay_HasBorder(t *testing.T) {
 	bg := strings.Repeat("BACKGROUND LINE\n", 24)
-	result := OverlayOnBackground("test", 30, 10, bg, 80, 24)
+	result := overlayOnBackground("test", 30, 10, bg, 80, 24)
 	if !strings.Contains(result, "╭") {
 		t.Fatalf("overlay should have rounded border, got:\n%s", result)
 	}
 }
 
-func TestOverlayOnBackground_PreservesBackground(t *testing.T) {
+func TestOverlay_PreservesBackground(t *testing.T) {
 	bg := strings.Repeat("BACKGROUND LINE HERE\n", 24)
-	result := OverlayOnBackground("tiny", 20, 5, bg, 80, 24)
+	result := overlayOnBackground("tiny", 20, 5, bg, 80, 24)
 	// Background lines outside the overlay area should still be present
 	if !strings.Contains(result, "BACKGROUND") {
 		t.Fatalf("overlay should preserve background lines, got:\n%s", result)
 	}
 }
 
-func TestOverlayOnBackground_NoAnsiArtifacts(t *testing.T) {
+func TestOverlay_NoAnsiArtifacts(t *testing.T) {
 	bg := strings.Repeat("BACKGROUND LINE HERE AND MORE TEXT PADDING\n", 24)
-	result := OverlayOnBackground("test", 20, 3, bg, 80, 24)
+	result := overlayOnBackground("test", 20, 3, bg, 80, 24)
 	// Should not contain broken ANSI sequences
 	if strings.Contains(result, ";163m") || strings.Contains(result, ";113") {
 		t.Fatalf("overlay should not have broken ANSI sequences, got:\n%s", result)

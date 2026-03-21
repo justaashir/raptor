@@ -114,7 +114,7 @@ func TestSortTickets_DoneAtBottom(t *testing.T) {
 		{ID: "done2", Title: "Done second", Status: model.Done, CreatedAt: now},
 		{ID: "prog1", Title: "In progress", Status: model.InProgress, CreatedAt: now},
 	}
-	sorted := SortTicketsForSidebar(tickets)
+	sorted := sortTicketsDoneLast(tickets)
 	// Non-done tickets should come first
 	if sorted[0].ID != "todo1" {
 		t.Fatalf("sorted[0] = %q, want todo1", sorted[0].ID)

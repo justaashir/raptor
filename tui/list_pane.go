@@ -26,9 +26,9 @@ func FormatStatus(s model.Status) string {
 	}
 }
 
-// SortTicketsForSidebar returns a copy with done tickets at the bottom,
+// sortTicketsDoneLast returns a copy with done tickets at the bottom,
 // preserving relative order within each group.
-func SortTicketsForSidebar(tickets []model.Ticket) []model.Ticket {
+func sortTicketsDoneLast(tickets []model.Ticket) []model.Ticket {
 	result := make([]model.Ticket, len(tickets))
 	copy(result, tickets)
 	sort.SliceStable(result, func(i, j int) bool {
@@ -218,7 +218,7 @@ func (lp *ListPane) SetTickets(tickets []model.Ticket) {
 		selectedID = old.ID
 	}
 
-	tickets = SortTicketsForSidebar(tickets)
+	tickets = sortTicketsDoneLast(tickets)
 	lp.tickets = tickets
 
 	items := make([]list.Item, len(tickets))

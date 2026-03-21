@@ -303,10 +303,9 @@ func TestApp_CreateView_RendersAsFloatingOverlay(t *testing.T) {
 		t.Fatal("create view should have floating window border")
 	}
 
-	// Should contain the status bar (background is still rendered)
-	if !strings.Contains(view, app.boardName) || !strings.Contains(view, "STATUS") {
-		// At minimum the view should contain the column header from the list pane
-		// which proves the background panes are still rendered
+	// Should contain the column header from the background (proves background is rendered)
+	if !strings.Contains(view, "STATUS") {
+		t.Fatal("create view should show background column header")
 	}
 }
 

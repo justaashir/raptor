@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"raptor/client"
 	"raptor/model"
 	"strings"
@@ -14,19 +13,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/log"
 	"nhooyr.io/websocket"
 )
-
-var logger *log.Logger
-
-func init() {
-	f, _ := os.OpenFile("/tmp/raptor.log", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-	logger = log.NewWithOptions(f, log.Options{
-		ReportTimestamp: true,
-		Prefix:          "tui",
-	})
-}
 
 // Create modal dimensions.
 const (
@@ -418,7 +406,7 @@ func (a *App) View() string {
 	content := lipgloss.JoinVertical(lipgloss.Left, header, panes)
 	contentLines := strings.Count(content, "\n") + 1
 	statusLines := strings.Count(statusBar, "\n") + 1
-	gap := a.height - contentLines - statusLines
+	gap := a.height - contentLines - statusLines - 1 // -1 for the joining newline
 	if gap < 0 {
 		gap = 0
 	}
@@ -439,7 +427,7 @@ func (a *App) View() string {
 		formArea := lipgloss.NewStyle().Height(formAreaH).Render(formView)
 
 		formContent := title + "\n\n" + formArea + "\n" + helpLine
-		return OverlayOnBackground(formContent, createBoxW, createBoxH, bg, a.width, a.height)
+		return overlayOnBackground(formContent, createBoxW, createBoxH, bg, a.width, a.height)
 	}
 
 	return bg
@@ -515,9 +503,9 @@ func (a *App) startCreateForm() tea.Cmd {
 
 func (a *App) updateCreate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Handle window resize during create
-	if wsMsg, ok := msg.(tea.WindowSizeMsg); ok {
-		a.width = wsMsg.Width
-		a.height = wsMsg.Height
+	if sizeMsg, ok := msg.(tea.WindowSizeMsg); ok {
+		a.width = sizeMsg.Width
+		a.height = sizeMsg.Height
 		a.initPanes()
 	}
 	// Only esc cancels — don't intercept 'q' so it can be typed in fields
@@ -601,7 +589,7 @@ func (a *App) listenWS() tea.Msg {
 		for {
 			_, data, err := c.Read(context.Background())
 			if err != nil {
-				c.Close(websocket.StatusNormalClosure, "")
+				c.Close(websocket.StatusGoingAway, "reconnecting")
 				break // reconnect
 			}
 			var ev map[string]string
