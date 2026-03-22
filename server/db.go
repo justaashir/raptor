@@ -276,9 +276,9 @@ func (db *DB) GetTicket(id string) (model.Ticket, error) {
 	return t, err
 }
 
-func (d *DB) ListTicketsMine(boardID, username string) ([]model.Ticket, error) {
+func (db *DB) ListTicketsMine(boardID, username string) ([]model.Ticket, error) {
 	var tickets []model.Ticket
-	err := d.conn.Where("board_id = ? AND (created_by = ? OR assignee = ?)", boardID, username, username).
+	err := db.conn.Where("board_id = ? AND (created_by = ? OR assignee = ?)", boardID, username, username).
 		Order("created_at desc").Find(&tickets).Error
 	return tickets, err
 }
