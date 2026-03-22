@@ -209,7 +209,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.gen != a.wsDebounceGen {
 			return a, nil // stale timer, ignore
 		}
-		return a, a.fetchTickets
+		return a, tea.Batch(a.fetchTickets, a.listenWS)
 
 	case workspacesMsg:
 		if len(msg.workspaces) == 1 {
