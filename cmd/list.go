@@ -2,9 +2,9 @@ package cmd
 
 import (
 	"fmt"
-	"hash/fnv"
 	"raptor/client"
 	"raptor/model"
+	"raptor/tui"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
@@ -15,13 +15,6 @@ var (
 	listStatus string
 	listMine   bool
 )
-
-// Auto-assign colors from a palette based on column index.
-var statusPalette = []lipgloss.Color{
-	lipgloss.Color("12"), lipgloss.Color("11"), lipgloss.Color("10"),
-	lipgloss.Color("13"), lipgloss.Color("14"), lipgloss.Color("9"),
-	lipgloss.Color("8"),
-}
 
 var headerStyle = lipgloss.NewStyle().Bold(true).Padding(0, 1)
 var cellStyle = lipgloss.NewStyle().Padding(0, 1)
@@ -37,10 +30,7 @@ func renderTicketTable(tickets []model.Ticket) string {
 			}
 			s := cellStyle
 			if col == 1 && row >= 0 && row < len(tickets) {
-				status := string(tickets[row].Status)
-				h := fnv.New32a()
-				h.Write([]byte(status))
-				s = s.Foreground(statusPalette[h.Sum32()%uint32(len(statusPalette))])
+				s = s.Foreground(tui.StatusColor(tickets[row].Status))
 			}
 			return s
 		})
