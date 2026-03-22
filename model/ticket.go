@@ -29,10 +29,15 @@ type Ticket struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
+// GenID returns a new unique identifier.
+func GenID() string {
+	return uuid.New().String()
+}
+
 func NewTicket(title, content, createdBy string) Ticket {
 	now := time.Now()
 	return Ticket{
-		ID:        uuid.New().String()[:12],
+		ID:        GenID(),
 		Title:     title,
 		Content:   content,
 		Status:    Todo,

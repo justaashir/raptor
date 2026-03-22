@@ -79,16 +79,18 @@ var updateCmd = &cobra.Command{
 			fmt.Println("Skipping skill update: server is not HTTPS")
 		} else {
 			skillResp, err := httpClient.Get(skillURL)
-			if err == nil && skillResp.StatusCode == http.StatusOK {
+			if err == nil {
 				defer skillResp.Body.Close()
-				const maxSkillSize = 64 * 1024 // 64KB
-				skillData, _ := io.ReadAll(io.LimitReader(skillResp.Body, maxSkillSize))
-				if len(skillData) > 0 {
-					homeDir, _ := os.UserHomeDir()
-					skillDir := homeDir + "/.claude/skills/raptor"
-					os.MkdirAll(skillDir, 0o755)
-					os.WriteFile(skillDir+"/SKILL.md", skillData, 0o644)
-					fmt.Println("Claude Code skill updated.")
+				if skillResp.StatusCode == http.StatusOK {
+					const maxSkillSize = 64 * 1024 // 64KB
+					skillData, _ := io.ReadAll(io.LimitReader(skillResp.Body, maxSkillSize))
+					if len(skillData) > 0 {
+						homeDir, _ := os.UserHomeDir()
+						skillDir := homeDir + "/.claude/skills/raptor"
+						os.MkdirAll(skillDir, 0o755)
+						os.WriteFile(skillDir+"/SKILL.md", skillData, 0o644)
+						fmt.Println("Claude Code skill updated.")
+					}
 				}
 			}
 		}

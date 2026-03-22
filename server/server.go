@@ -12,38 +12,66 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"golang.org/x/time/rate"
 	"gorm.io/gorm"
 	"nhooyr.io/websocket"
 )
 
+type rateLimitEntry struct {
+	limiter  *rate.Limiter
+	lastSeen time.Time
+}
+
 type ipRateLimiter struct {
 	mu       sync.Mutex
-	limiters map[string]*rate.Limiter
+	limiters map[string]*rateLimitEntry
 	r        rate.Limit
 	burst    int
 }
 
 func newIPRateLimiter(r rate.Limit, burst int) *ipRateLimiter {
-	return &ipRateLimiter{
-		limiters: make(map[string]*rate.Limiter),
+	rl := &ipRateLimiter{
+		limiters: make(map[string]*rateLimitEntry),
 		r:        r,
 		burst:    burst,
 	}
+	go rl.cleanupLoop()
+	return rl
 }
 
 func (rl *ipRateLimiter) allow(ip string) bool {
 	rl.mu.Lock()
-	limiter, ok := rl.limiters[ip]
+	entry, ok := rl.limiters[ip]
 	if !ok {
-		limiter = rate.NewLimiter(rl.r, rl.burst)
-		rl.limiters[ip] = limiter
+		entry = &rateLimitEntry{limiter: rate.NewLimiter(rl.r, rl.burst)}
+		rl.limiters[ip] = entry
 	}
+	entry.lastSeen = time.Now()
 	rl.mu.Unlock()
-	return limiter.Allow()
+	return entry.limiter.Allow()
 }
+
+func (rl *ipRateLimiter) cleanup(maxAge time.Duration) {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	cutoff := time.Now().Add(-maxAge)
+	for ip, entry := range rl.limiters {
+		if entry.lastSeen.Before(cutoff) {
+			delete(rl.limiters, ip)
+		}
+	}
+}
+
+func (rl *ipRateLimiter) cleanupLoop() {
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		rl.cleanup(time.Hour)
+	}
+}
+
+var ticketChangedEvent = []byte(`{"event":"ticket_changed"}`)
 
 var allowedPatchFields = map[string]bool{
 	"title": true, "content": true, "status": true,
@@ -166,7 +194,7 @@ func (s *Server) authorize(c echo.Context, workspaceID, minRole string) error {
 var roleLevels = map[string]int{"owner": 2, "member": 1}
 
 func genID() string {
-	return uuid.New().String()[:12]
+	return model.GenID()
 }
 
 var errHandled = errors.New("handled")
@@ -194,7 +222,9 @@ type wsConn struct {
 }
 
 func (w *wsConn) Send(msg []byte) error {
-	return w.conn.Write(w.ctx, websocket.MessageText, msg)
+	ctx, cancel := context.WithTimeout(w.ctx, 10*time.Second)
+	defer cancel()
+	return w.conn.Write(ctx, websocket.MessageText, msg)
 }
 
 func (s *Server) handleWS(c echo.Context) error {
@@ -359,7 +389,7 @@ func (s *Server) listBoards(c echo.Context) error {
 	if err := s.authorize(c, wid, "member"); err != nil {
 		return jsonErr(c, http.StatusForbidden, err.Error())
 	}
-	boards, err := s.db.ListBoardsForUser(wid, username(c))
+	boards, err := s.db.ListBoardsForUser(wid)
 	if err != nil {
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
@@ -539,12 +569,9 @@ func (s *Server) createTicket(c echo.Context) error {
 	ticket := model.NewTicket(input.Title, input.Content, u)
 	ticket.BoardID = bid
 	// Set default status to the board's first status
-	board, err := s.db.GetBoard(bid)
+	board, err := s.requireBoard(c)
 	if err != nil {
-		return jsonErr(c, http.StatusInternalServerError, "internal server error")
-	}
-	if board.WorkspaceID != wid {
-		return jsonErr(c, http.StatusNotFound, "board not found")
+		return nil
 	}
 	statuses := board.StatusList()
 	if len(statuses) > 0 {
@@ -560,7 +587,7 @@ func (s *Server) createTicket(c echo.Context) error {
 	if err := s.db.CreateTicket(ticket); err != nil {
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
-	s.hub.Broadcast([]byte(`{"event":"ticket_changed"}`))
+	s.hub.Broadcast(ticketChangedEvent)
 	return c.JSON(http.StatusCreated, ticket)
 }
 
@@ -640,7 +667,7 @@ func (s *Server) updateTicket(c echo.Context) error {
 		log.Printf("ticket update error: %v", err)
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
-	s.hub.Broadcast([]byte(`{"event":"ticket_changed"}`))
+	s.hub.Broadcast(ticketChangedEvent)
 	ticket, err := s.db.GetTicket(tid)
 	if err != nil {
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")
@@ -665,6 +692,6 @@ func (s *Server) deleteTicket(c echo.Context) error {
 	if err := s.db.DeleteTicket(tid); err != nil {
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
-	s.hub.Broadcast([]byte(`{"event":"ticket_changed"}`))
+	s.hub.Broadcast(ticketChangedEvent)
 	return c.NoContent(http.StatusNoContent)
 }

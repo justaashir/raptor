@@ -223,7 +223,7 @@ func TestDB_CreateBoard_WithStatuses(t *testing.T) {
 		t.Fatalf("failed to create board: %v", err)
 	}
 
-	boards, err := db.ListBoardsForUser("ws1", "alice")
+	boards, err := db.ListBoardsForUser("ws1")
 	if err != nil {
 		t.Fatalf("failed to list boards: %v", err)
 	}
@@ -247,13 +247,13 @@ func TestDB_ListBoardsForUser_AllMembersSeeAllBoards(t *testing.T) {
 	db.CreateBoard("bd2", "ws1", "Board 2", "alice", model.DefaultStatuses)
 
 	// bob (member) sees all boards — no board-level ACL
-	boards, _ := db.ListBoardsForUser("ws1", "bob")
+	boards, _ := db.ListBoardsForUser("ws1")
 	if len(boards) != 2 {
 		t.Fatalf("expected 2 boards for bob (member sees all), got %d", len(boards))
 	}
 
 	// alice (owner) also sees all
-	boards, _ = db.ListBoardsForUser("ws1", "alice")
+	boards, _ = db.ListBoardsForUser("ws1")
 	if len(boards) != 2 {
 		t.Fatalf("expected 2 boards for alice (owner), got %d", len(boards))
 	}
@@ -268,7 +268,7 @@ func TestDB_DeleteBoard(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to delete board: %v", err)
 	}
-	boards, _ := db.ListBoardsForUser("ws1", "alice")
+	boards, _ := db.ListBoardsForUser("ws1")
 	if len(boards) != 0 {
 		t.Fatalf("expected 0 boards after delete, got %d", len(boards))
 	}
