@@ -222,7 +222,9 @@ type wsConn struct {
 }
 
 func (w *wsConn) Send(msg []byte) error {
-	return w.conn.Write(w.ctx, websocket.MessageText, msg)
+	ctx, cancel := context.WithTimeout(w.ctx, 10*time.Second)
+	defer cancel()
+	return w.conn.Write(ctx, websocket.MessageText, msg)
 }
 
 func (s *Server) handleWS(c echo.Context) error {
