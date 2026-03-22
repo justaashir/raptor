@@ -175,15 +175,11 @@ func (db *DB) CreateBoard(id, workspaceID, name, createdBy string, statuses []st
 	}).Error
 }
 
-func (db *DB) ListBoardsForUser(workspaceID, username string) ([]model.Board, error) {
-	// All workspace members see all boards — no board-level ACL
-	_, err := db.GetMemberRole(workspaceID, username)
-	if err != nil {
-		return nil, nil
-	}
-
+func (db *DB) ListBoardsForUser(workspaceID string) ([]model.Board, error) {
+	// All workspace members see all boards — no board-level ACL.
+	// Authorization is handled at the handler layer.
 	var boards []model.Board
-	err = db.conn.Where("workspace_id = ?", workspaceID).
+	err := db.conn.Where("workspace_id = ?", workspaceID).
 		Order("created_at").Find(&boards).Error
 	return boards, err
 }
