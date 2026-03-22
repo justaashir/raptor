@@ -19,30 +19,57 @@ import (
 	"nhooyr.io/websocket"
 )
 
+type rateLimitEntry struct {
+	limiter  *rate.Limiter
+	lastSeen time.Time
+}
+
 type ipRateLimiter struct {
 	mu       sync.Mutex
-	limiters map[string]*rate.Limiter
+	limiters map[string]*rateLimitEntry
 	r        rate.Limit
 	burst    int
 }
 
 func newIPRateLimiter(r rate.Limit, burst int) *ipRateLimiter {
-	return &ipRateLimiter{
-		limiters: make(map[string]*rate.Limiter),
+	rl := &ipRateLimiter{
+		limiters: make(map[string]*rateLimitEntry),
 		r:        r,
 		burst:    burst,
 	}
+	go rl.cleanupLoop()
+	return rl
 }
 
 func (rl *ipRateLimiter) allow(ip string) bool {
 	rl.mu.Lock()
-	limiter, ok := rl.limiters[ip]
+	entry, ok := rl.limiters[ip]
 	if !ok {
-		limiter = rate.NewLimiter(rl.r, rl.burst)
-		rl.limiters[ip] = limiter
+		entry = &rateLimitEntry{limiter: rate.NewLimiter(rl.r, rl.burst)}
+		rl.limiters[ip] = entry
 	}
+	entry.lastSeen = time.Now()
 	rl.mu.Unlock()
-	return limiter.Allow()
+	return entry.limiter.Allow()
+}
+
+func (rl *ipRateLimiter) cleanup(maxAge time.Duration) {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	cutoff := time.Now().Add(-maxAge)
+	for ip, entry := range rl.limiters {
+		if entry.lastSeen.Before(cutoff) {
+			delete(rl.limiters, ip)
+		}
+	}
+}
+
+func (rl *ipRateLimiter) cleanupLoop() {
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		rl.cleanup(time.Hour)
+	}
 }
 
 var allowedPatchFields = map[string]bool{
