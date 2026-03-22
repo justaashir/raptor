@@ -37,8 +37,12 @@ func NewDB(dsn string) (*DB, error) {
 		return nil, err
 	}
 
-	// Auto-migrate all models (foreign keys OFF during migration to prevent
-	// CASCADE deletes when GORM recreates tables via drop-and-rename)
+	// Explicitly disable foreign keys before migration — do not rely on
+	// the SQLite default, which could change across driver versions.
+	if err := conn.Exec("PRAGMA foreign_keys = OFF").Error; err != nil {
+		return nil, err
+	}
+
 	if err := conn.AutoMigrate(
 		&model.Workspace{},
 		&model.WorkspaceMember{},

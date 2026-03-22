@@ -13,7 +13,7 @@ type Workspace struct {
 }
 
 type WorkspaceMember struct {
-	WorkspaceID string    `json:"workspace_id" gorm:"primaryKey;constraint:OnDelete:CASCADE"`
+	WorkspaceID string    `json:"workspace_id" gorm:"primaryKey"`
 	Username    string    `json:"username" gorm:"primaryKey"`
 	Role        string    `json:"role" gorm:"not null;check:role IN ('owner','member')"`
 	CreatedAt   time.Time `json:"created_at"`
@@ -21,7 +21,7 @@ type WorkspaceMember struct {
 
 type Board struct {
 	ID          string    `json:"id" gorm:"primaryKey"`
-	WorkspaceID string    `json:"workspace_id" gorm:"not null;constraint:OnDelete:CASCADE"`
+	WorkspaceID string    `json:"workspace_id" gorm:"not null"`
 	Name        string    `json:"name" gorm:"not null"`
 	Statuses    string    `json:"statuses" gorm:"not null;default:'todo,in_progress,done'"`
 	CreatedBy   string    `json:"created_by" gorm:"not null"`
