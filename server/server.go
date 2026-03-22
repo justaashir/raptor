@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"golang.org/x/time/rate"
 	"gorm.io/gorm"
@@ -193,7 +192,7 @@ func (s *Server) authorize(c echo.Context, workspaceID, minRole string) error {
 var roleLevels = map[string]int{"owner": 2, "member": 1}
 
 func genID() string {
-	return uuid.New().String()
+	return model.GenID()
 }
 
 var errHandled = errors.New("handled")
@@ -566,12 +565,9 @@ func (s *Server) createTicket(c echo.Context) error {
 	ticket := model.NewTicket(input.Title, input.Content, u)
 	ticket.BoardID = bid
 	// Set default status to the board's first status
-	board, err := s.db.GetBoard(bid)
+	board, err := s.requireBoard(c)
 	if err != nil {
-		return jsonErr(c, http.StatusInternalServerError, "internal server error")
-	}
-	if board.WorkspaceID != wid {
-		return jsonErr(c, http.StatusNotFound, "board not found")
+		return nil
 	}
 	statuses := board.StatusList()
 	if len(statuses) > 0 {
