@@ -1201,6 +1201,99 @@ func TestServer_RemoveLastOwner_Rejected(t *testing.T) {
 	}
 }
 
+func TestServer_AuthRateLimiting(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
+	body := `{"username":"alice"}`
+	for i := 0; i < 5; i++ {
+		req := httptest.NewRequest("POST", "/api/auth", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		srv.ServeHTTP(w, req)
+		if w.Code == http.StatusTooManyRequests {
+			t.Fatalf("got 429 too early on request %d", i+1)
+		}
+	}
+	// 6th request should be rate-limited
+	req := httptest.NewRequest("POST", "/api/auth", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 on 6th request, got %d", w.Code)
+	}
+}
+
+func TestValidateStatuses(t *testing.T) {
+	tests := []struct {
+		statuses []string
+		wantErr  bool
+	}{
+		{[]string{"todo", "done"}, false},
+		{[]string{"backlog", "in_progress", "done"}, false},
+		{[]string{""}, true},
+		{[]string{"has space"}, true},
+		{[]string{"has,comma"}, true},
+	}
+	for _, tt := range tests {
+		err := validateStatuses(tt.statuses)
+		if (err != nil) != tt.wantErr {
+			t.Errorf("validateStatuses(%v) error = %v, wantErr %v", tt.statuses, err, tt.wantErr)
+		}
+	}
+}
+
+func setupWorkspaceAndBoardWithStatuses(t *testing.T, srv *Server, token string, statuses []string) (wsID, bdID string) {
+	t.Helper()
+
+	body := `{"name":"Team"}`
+	req := httptest.NewRequest("POST", "/api/workspaces/", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("setup: create workspace failed: %d: %s", w.Code, w.Body.String())
+	}
+	var ws struct{ ID string `json:"id"` }
+	json.NewDecoder(w.Body).Decode(&ws)
+
+	statusJSON, _ := json.Marshal(statuses)
+	boardBody := fmt.Sprintf(`{"name":"Board","statuses":%s}`, statusJSON)
+	req = httptest.NewRequest("POST", "/api/workspaces/"+ws.ID+"/boards", strings.NewReader(boardBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w = httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("setup: create board failed: %d: %s", w.Code, w.Body.String())
+	}
+	var bd struct{ ID string `json:"id"` }
+	json.NewDecoder(w.Body).Decode(&bd)
+
+	return ws.ID, bd.ID
+}
+
+func TestServer_CreateTicket_UsesFirstBoardStatus(t *testing.T) {
+	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
+	token := mustToken(t, "alice", "secret")
+	wsID, bdID := setupWorkspaceAndBoardWithStatuses(t, srv, token, []string{"backlog", "active", "done"})
+
+	body := `{"title":"test ticket"}`
+	req := httptest.NewRequest("POST", ticketURL(wsID, bdID), strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+	var ticket model.Ticket
+	json.NewDecoder(w.Body).Decode(&ticket)
+	if ticket.Status != "backlog" {
+		t.Fatalf("expected status 'backlog', got '%s'", ticket.Status)
+	}
+}
+
 func TestServer_CreateWorkspace_RejectsLongName(t *testing.T) {
 	srv := newTestServerWithAuth(t, "secret", []string{"alice"})
 	token := mustToken(t, "alice", "secret")
