@@ -21,7 +21,7 @@ type Ticket struct {
 	Title      string    `json:"title" gorm:"not null"`
 	Content    string    `json:"content" gorm:"default:''"`
 	Status     Status    `json:"status" gorm:"not null;default:'todo';index:idx_board_status"`
-	BoardID    string    `json:"board_id" gorm:"default:'';index:idx_board_status;constraint:OnDelete:CASCADE"`
+	BoardID    string    `json:"board_id" gorm:"default:'';index:idx_board_status"`
 	CreatedBy  string    `json:"created_by" gorm:"default:''"`
 	Assignee   string    `json:"assignee" gorm:"default:''"`
 	AssignedBy string    `json:"assigned_by" gorm:"default:''"`

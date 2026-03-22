@@ -55,15 +55,12 @@ for platform in $PLATFORMS; do
     GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=0 go build -ldflags "$LDFLAGS" -o "$DIST_DIR/raptor-${GOOS}-${GOARCH}" "$ROOT_DIR"
 done
 
-# Bump version and deploy server
+# Bump version — Railway auto-deploys on push to main, so no need for
+# "railway up" (which caused a double deploy + SQLite corruption).
 echo "$VERSION" > "$ROOT_DIR/VERSION"
 railway variables set VERSION="$VERSION" 2>/dev/null || echo "Warning: could not set Railway VERSION (set manually)"
 
-echo "Deploying server..."
-cd "$ROOT_DIR"
-railway up --detach
-
-# Commit, tag, and create GitHub release with binaries
+# Commit, tag, push — Railway auto-deploy handles the rest
 cd "$ROOT_DIR"
 git add VERSION
 git commit -m "Release v${VERSION}" || true

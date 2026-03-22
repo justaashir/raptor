@@ -509,6 +509,146 @@ func TestDB_ListTicketsMine(t *testing.T) {
 	}
 }
 
+func TestDB_TicketsSurviveRestart(t *testing.T) {
+	// Simulates what happens on Railway deploy: server stops, new container
+	// starts, NewDB() runs AutoMigrate again on the same database file.
+	dbPath := t.TempDir() + "/raptor.db"
+
+	// First "boot": create workspace, board, and tickets
+	db1, err := NewDB(dbPath)
+	if err != nil {
+		t.Fatalf("first open: %v", err)
+	}
+	db1.CreateWorkspace("ws1", "Team", "alice")
+	db1.CreateBoard("bd1", "ws1", "Sprint", "alice", model.DefaultStatuses)
+
+	ticket := model.NewTicket("Important task", "do not lose me", "alice")
+	ticket.BoardID = "bd1"
+	db1.CreateTicket(ticket)
+
+	tickets, _ := db1.ListTickets("bd1", "")
+	if len(tickets) != 1 {
+		t.Fatalf("setup: expected 1 ticket, got %d", len(tickets))
+	}
+	db1.Close()
+
+	// Second "boot": simulates redeploy — NewDB runs AutoMigrate again
+	db2, err := NewDB(dbPath)
+	if err != nil {
+		t.Fatalf("second open: %v", err)
+	}
+	defer db2.Close()
+
+	tickets, err = db2.ListTickets("bd1", "")
+	if err != nil {
+		t.Fatalf("failed to list after restart: %v", err)
+	}
+	if len(tickets) != 1 {
+		t.Fatalf("expected 1 ticket after restart, got %d (tickets lost!)", len(tickets))
+	}
+	if tickets[0].Title != "Important task" {
+		t.Fatalf("expected title %q, got %q", "Important task", tickets[0].Title)
+	}
+}
+
+func TestDB_TicketsSurviveRestart_WithForeignKeysOn(t *testing.T) {
+	// Regression: even if foreign_keys was left ON from a previous connection
+	// (e.g. unclean shutdown), AutoMigrate must not lose data.
+	dbPath := t.TempDir() + "/raptor.db"
+
+	// First boot: create data
+	db1, err := NewDB(dbPath)
+	if err != nil {
+		t.Fatalf("first open: %v", err)
+	}
+	db1.CreateWorkspace("ws1", "Team", "alice")
+	db1.CreateBoard("bd1", "ws1", "Sprint", "alice", model.DefaultStatuses)
+	ticket := model.NewTicket("Survive me", "please", "alice")
+	ticket.BoardID = "bd1"
+	db1.CreateTicket(ticket)
+
+	// Leave foreign_keys ON (simulating unclean state persisted in DB)
+	db1.conn.Exec("PRAGMA foreign_keys = ON")
+	db1.Close()
+
+	// Second boot: NewDB must handle this safely
+	db2, err := NewDB(dbPath)
+	if err != nil {
+		t.Fatalf("second open: %v", err)
+	}
+	defer db2.Close()
+
+	tickets, err := db2.ListTickets("bd1", "")
+	if err != nil {
+		t.Fatalf("failed to list: %v", err)
+	}
+	if len(tickets) != 1 {
+		t.Fatalf("expected 1 ticket after restart with FK on, got %d (tickets lost!)", len(tickets))
+	}
+}
+
+func TestDB_ForeignKeysOffDuringMigration(t *testing.T) {
+	// Foreign keys MUST be OFF during AutoMigrate to prevent CASCADE deletes
+	// when GORM recreates tables. Verify NewDB explicitly disables them first.
+	dbPath := t.TempDir() + "/raptor.db"
+	db, err := NewDB(dbPath)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+
+	// After NewDB, foreign_keys should be ON (enabled after migration)
+	var fk int
+	db.conn.Raw("PRAGMA foreign_keys").Scan(&fk)
+	if fk != 1 {
+		t.Fatalf("expected foreign_keys=1 after NewDB, got %d", fk)
+	}
+}
+
+func TestDB_ExplicitForeignKeysOff_BeforeMigration(t *testing.T) {
+	// NewDB must explicitly set PRAGMA foreign_keys = OFF before AutoMigrate,
+	// not rely on the SQLite default. This prevents data loss if a future
+	// driver version changes the default or if constraints are added later.
+	dbPath := t.TempDir() + "/raptor.db"
+	db, err := NewDB(dbPath)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+
+	// Verify foreign_keys is ON after NewDB completes (set after migration)
+	var fk int
+	db.conn.Raw("PRAGMA foreign_keys").Scan(&fk)
+	if fk != 1 {
+		t.Fatalf("expected foreign_keys=1 after NewDB, got %d", fk)
+	}
+}
+
+func TestDB_CascadeDeleteHandledInAppCode(t *testing.T) {
+	// Verify that deleting a board via app code still cascades to tickets,
+	// even without constraint:OnDelete:CASCADE in GORM tags.
+	db := newTestDB(t)
+	db.CreateWorkspace("ws1", "Team", "alice")
+	db.CreateBoard("bd1", "ws1", "Sprint", "alice", model.DefaultStatuses)
+
+	t1 := model.NewTicket("Task 1", "", "alice")
+	t1.BoardID = "bd1"
+	db.CreateTicket(t1)
+	t2 := model.NewTicket("Task 2", "", "alice")
+	t2.BoardID = "bd1"
+	db.CreateTicket(t2)
+
+	err := db.DeleteBoard("bd1")
+	if err != nil {
+		t.Fatalf("failed to delete board: %v", err)
+	}
+
+	tickets, _ := db.ListTickets("bd1", "")
+	if len(tickets) != 0 {
+		t.Fatalf("expected 0 tickets after board delete, got %d (app cascade broken!)", len(tickets))
+	}
+}
+
 func TestDB_DeleteWorkspace_CascadesAll(t *testing.T) {
 	db := newTestDB(t)
 	db.CreateWorkspace("ws1", "WS", "alice")
