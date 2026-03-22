@@ -71,6 +71,8 @@ func (rl *ipRateLimiter) cleanupLoop() {
 	}
 }
 
+var ticketChangedEvent = []byte(`{"event":"ticket_changed"}`)
+
 var allowedPatchFields = map[string]bool{
 	"title": true, "content": true, "status": true,
 	"assignee": true,
@@ -583,7 +585,7 @@ func (s *Server) createTicket(c echo.Context) error {
 	if err := s.db.CreateTicket(ticket); err != nil {
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
-	s.hub.Broadcast([]byte(`{"event":"ticket_changed"}`))
+	s.hub.Broadcast(ticketChangedEvent)
 	return c.JSON(http.StatusCreated, ticket)
 }
 
@@ -663,7 +665,7 @@ func (s *Server) updateTicket(c echo.Context) error {
 		log.Printf("ticket update error: %v", err)
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
-	s.hub.Broadcast([]byte(`{"event":"ticket_changed"}`))
+	s.hub.Broadcast(ticketChangedEvent)
 	ticket, err := s.db.GetTicket(tid)
 	if err != nil {
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")
@@ -688,6 +690,6 @@ func (s *Server) deleteTicket(c echo.Context) error {
 	if err := s.db.DeleteTicket(tid); err != nil {
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
-	s.hub.Broadcast([]byte(`{"event":"ticket_changed"}`))
+	s.hub.Broadcast(ticketChangedEvent)
 	return c.NoContent(http.StatusNoContent)
 }
