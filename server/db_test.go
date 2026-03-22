@@ -461,8 +461,8 @@ func TestDB_PragmaSettings(t *testing.T) {
 
 	var syncMode int
 	db.conn.Raw("PRAGMA synchronous").Scan(&syncMode)
-	if syncMode != 1 {
-		t.Errorf("expected synchronous=1 (NORMAL), got %d", syncMode)
+	if syncMode != 2 {
+		t.Errorf("expected synchronous=2 (FULL), got %d", syncMode)
 	}
 
 	sqlDB, err := db.conn.DB()

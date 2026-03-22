@@ -1,11 +1,15 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"raptor/server"
 	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -57,6 +61,36 @@ var serveCmd = &cobra.Command{
 
 		srv := server.NewServer(db, hub, opts...)
 		addr := fmt.Sprintf(":%d", servePort)
+
+		// Log DB path and file info for debugging volume persistence
+		fmt.Printf("Database path: %s\n", dbPath)
+		if info, err := os.Stat(dbPath); err == nil {
+			fmt.Printf("Database file size: %d bytes\n", info.Size())
+		} else {
+			fmt.Printf("Database file: new (will be created)\n")
+		}
+
+		// Graceful shutdown: handle SIGTERM/SIGINT to checkpoint WAL before exit
+		go func() {
+			quit := make(chan os.Signal, 1)
+			signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
+			sig := <-quit
+			fmt.Printf("\nReceived %s, shutting down gracefully...\n", sig)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+			defer cancel()
+
+			if err := srv.Echo.Shutdown(ctx); err != nil {
+				fmt.Printf("Echo shutdown error: %v\n", err)
+			}
+
+			fmt.Println("Checkpointing WAL...")
+			if err := db.Checkpoint(); err != nil {
+				fmt.Printf("WAL checkpoint error: %v\n", err)
+			}
+			fmt.Println("Shutdown complete")
+		}()
+
 		fmt.Printf("Raptor server listening on %s\n", addr)
 		return srv.Echo.Start(addr)
 	},

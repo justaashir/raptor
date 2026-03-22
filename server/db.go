@@ -33,7 +33,7 @@ func NewDB(dsn string) (*DB, error) {
 	if err := conn.Exec("PRAGMA busy_timeout = 5000").Error; err != nil {
 		return nil, err
 	}
-	if err := conn.Exec("PRAGMA synchronous = NORMAL").Error; err != nil {
+	if err := conn.Exec("PRAGMA synchronous = FULL").Error; err != nil {
 		return nil, err
 	}
 
@@ -71,7 +71,13 @@ func NewDB(dsn string) (*DB, error) {
 	return &DB{conn: conn}, nil
 }
 
+func (db *DB) Checkpoint() error {
+	return db.conn.Exec("PRAGMA wal_checkpoint(TRUNCATE)").Error
+}
+
 func (db *DB) Close() error {
+	// Checkpoint WAL before closing to ensure all data is in the main DB file
+	_ = db.Checkpoint()
 	sqlDB, err := db.conn.DB()
 	if err != nil {
 		return err
