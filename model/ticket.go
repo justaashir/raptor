@@ -32,7 +32,7 @@ type Ticket struct {
 func NewTicket(title, content, createdBy string) Ticket {
 	now := time.Now()
 	return Ticket{
-		ID:        uuid.New().String()[:12],
+		ID:        uuid.New().String(),
 		Title:     title,
 		Content:   content,
 		Status:    Todo,

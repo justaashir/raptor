@@ -166,7 +166,7 @@ func (s *Server) authorize(c echo.Context, workspaceID, minRole string) error {
 var roleLevels = map[string]int{"owner": 2, "member": 1}
 
 func genID() string {
-	return uuid.New().String()[:12]
+	return uuid.New().String()
 }
 
 var errHandled = errors.New("handled")
