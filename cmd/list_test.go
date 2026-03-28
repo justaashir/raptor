@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"raptor/model"
+	"strings"
 	"testing"
 )
 
@@ -37,5 +38,28 @@ func TestFormatTicketTable_MultipleTickets_AllRowsPresent(t *testing.T) {
 		"ccc33333\tdone\t\tThird\n"
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+func TestRenderTicketTable_AlignedColumns(t *testing.T) {
+	tickets := []model.Ticket{
+		{ID: "aaa11111", Status: model.Todo, Assignee: "alice", Title: "First"},
+		{ID: "bbb22222", Status: model.InProgress, Assignee: "bob", Title: "Second"},
+	}
+	got := renderTicketTable(tickets)
+	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("expected 3 lines (header + 2 rows), got %d: %q", len(lines), got)
+	}
+	// Header should contain column names
+	if !strings.Contains(lines[0], "ID") || !strings.Contains(lines[0], "TITLE") {
+		t.Fatalf("header missing column names: %q", lines[0])
+	}
+	// All STATUS columns should start at the same position
+	headerPos := strings.Index(lines[0], "STATUS")
+	row1Pos := strings.Index(lines[1], "todo")
+	row2Pos := strings.Index(lines[2], "in_progress")
+	if headerPos != row1Pos || headerPos != row2Pos {
+		t.Fatalf("STATUS column not aligned: header=%d, row1=%d, row2=%d", headerPos, row1Pos, row2Pos)
 	}
 }

@@ -5,9 +5,18 @@ import (
 	"raptor/client"
 	"raptor/model"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 )
+
+func renderTicketTable(tickets []model.Ticket) string {
+	var buf strings.Builder
+	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, formatTicketTable(tickets))
+	w.Flush()
+	return buf.String()
+}
 
 func formatTicketTable(tickets []model.Ticket) string {
 	var b strings.Builder
