@@ -68,3 +68,19 @@ func TestRenderTicketView_ContainsANSI(t *testing.T) {
 		t.Fatalf("expected ANSI escape codes in output, got:\n%s", got)
 	}
 }
+
+func TestRenderTicketView_EmptyContent_NoSeparator(t *testing.T) {
+	tk := model.Ticket{
+		ID:     "abc12345",
+		Title:  "No body",
+		Status: model.Todo,
+	}
+	got, err := renderTicketView(tk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain := stripANSI(got)
+	if strings.Contains(plain, "---") {
+		t.Fatalf("should not contain separator when content is empty, got:\n%s", plain)
+	}
+}
