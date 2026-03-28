@@ -27,3 +27,19 @@ func TestRenderTicketView_ShowsMetadata(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderTicketView_IncludesContent(t *testing.T) {
+	tk := model.Ticket{
+		ID:      "abc12345",
+		Title:   "Test",
+		Status:  model.Todo,
+		Content: "This is the **body** of the ticket.",
+	}
+	got, err := renderTicketView(tk)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "body") {
+		t.Fatalf("expected content in output, got:\n%s", got)
+	}
+}
