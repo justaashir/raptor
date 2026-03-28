@@ -2,40 +2,76 @@
 
 A multiplayer CLI kanban board with real-time sync.
 
-## Quick Start
+## Install
 
-```sh
-# Build
-go build -o raptor .
-
-# Start server
-./raptor serve
-
-# In another terminal — launch TUI
-./raptor
-
-# Or use CLI commands
-./raptor add "My first task" --content "# Details here"
-./raptor list
-./raptor move <id> in_progress
+```bash
+go install github.com/yourusername/raptor@latest
 ```
 
-## TUI Keys
+Or build from source:
 
-| Key | Action |
-|-----|--------|
-| h/l, ←/→ | Switch column |
-| j/k, ↑/↓ | Navigate tickets |
-| Enter | View ticket detail |
-| n | New ticket |
-| m | Move ticket (cycle status) |
-| e | Edit ticket |
-| d | Delete ticket |
-| r | Refresh |
-| q | Quit |
+```bash
+git clone https://github.com/yourusername/raptor && cd raptor
+go build -o raptor .
+```
 
-## Architecture
+## Quick Start
 
-Go server with SQLite persistence, WebSocket for real-time broadcast, Charm TUI.
+```bash
+# Start the server
+RAPTOR_SECRET=mysecret raptor serve
 
-Two terminals running `raptor` will see each other's changes in real-time.
+# Login (uses GitHub identity via `gh`)
+raptor login
+
+# Set up a workspace and board
+raptor workspace create myteam
+raptor board create sprint-1
+
+# Add tickets
+raptor add "Fix login bug" -c "Users see a 500 on /auth" -a alice
+
+# View the board
+raptor list
+raptor list --status todo --mine
+
+# Show a ticket with rendered markdown
+raptor show abc12345
+
+# Move tickets through the pipeline
+raptor move abc12345 in_progress
+raptor move abc12345 done
+
+# Search
+raptor search "login"
+```
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `list` (alias: `ls`) | List tickets with filters |
+| `add` | Create a ticket |
+| `show` | View ticket with markdown rendering |
+| `move` | Change ticket status |
+| `edit` | Update title, content, or assignee |
+| `search` | Full-text search |
+| `rm` | Delete a ticket |
+| `stats` | Ticket counts by status |
+| `workspace` | Manage workspaces |
+| `board` | Manage boards |
+| `doctor` | Check connectivity and config |
+
+Every command supports `--json` for machine-readable output.
+
+## Self-Hosted
+
+```bash
+RAPTOR_SECRET=changeme RAPTOR_USERS=alice,bob raptor serve
+```
+
+Set `DATABASE_PATH` to persist data. Defaults to `./raptor.db` (SQLite).
+
+## License
+
+MIT
