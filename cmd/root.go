@@ -3,7 +3,6 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"raptor/client"
 	"time"
@@ -112,8 +111,7 @@ func newUnscopedClient() *client.Client {
 
 // fetchServerVersion returns the server's version string, or "" on error.
 func fetchServerVersion() string {
-	c := &http.Client{Timeout: 5 * time.Second}
-	resp, err := c.Get(serverURL + "/api/version")
+	resp, err := httpClient.Get(serverURL + "/api/version")
 	if err != nil {
 		return ""
 	}
@@ -127,11 +125,34 @@ func fetchServerVersion() string {
 	return info.Version
 }
 
+const updateCheckInterval = 24 * time.Hour
+
+func shouldCheckUpdate(cfg Config) bool {
+	if cfg.LastUpdateCheck == 0 {
+		return true
+	}
+	return time.Since(time.Unix(cfg.LastUpdateCheck, 0)) > updateCheckInterval
+}
+
 func checkForUpdate() {
 	if Version == "dev" {
 		return
 	}
-	if v := fetchServerVersion(); v != "" && v != Version {
-		fmt.Fprintf(os.Stderr, "\nUpdate available: %s → %s (run `raptor update`)\n", Version, v)
+	cfg, _ := LoadConfig()
+	if !shouldCheckUpdate(cfg) {
+		// Use cached version if available
+		if cfg.LatestVersion != "" && cfg.LatestVersion != Version {
+			fmt.Fprintf(os.Stderr, "\nUpdate available: %s → %s (run `raptor update`)\n", Version, cfg.LatestVersion)
+		}
+		return
+	}
+	v := fetchServerVersion()
+	if v != "" {
+		cfg.LastUpdateCheck = time.Now().Unix()
+		cfg.LatestVersion = v
+		_ = SaveConfig(cfg)
+		if v != Version {
+			fmt.Fprintf(os.Stderr, "\nUpdate available: %s → %s (run `raptor update`)\n", Version, v)
+		}
 	}
 }

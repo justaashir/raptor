@@ -215,6 +215,8 @@ func (db *DB) CreateTicket(t model.Ticket) error {
 	return db.conn.Create(&t).Error
 }
 
+const defaultListLimit = 500
+
 func (db *DB) ListTickets(boardID, status string) ([]model.Ticket, error) {
 	var tickets []model.Ticket
 	q := db.conn.Model(&model.Ticket{})
@@ -224,7 +226,7 @@ func (db *DB) ListTickets(boardID, status string) ([]model.Ticket, error) {
 	if status != "" {
 		q = q.Where("status = ?", status)
 	}
-	err := q.Order("created_at DESC").Find(&tickets).Error
+	err := q.Order("created_at DESC").Limit(defaultListLimit).Find(&tickets).Error
 	return tickets, err
 }
 
@@ -240,7 +242,7 @@ func (db *DB) SearchTickets(boardID, query string) ([]model.Ticket, error) {
 	if boardID != "" {
 		q = q.Where("board_id = ?", boardID)
 	}
-	err := q.Order("created_at DESC").Find(&tickets).Error
+	err := q.Order("created_at DESC").Limit(defaultListLimit).Find(&tickets).Error
 	return tickets, err
 }
 
@@ -264,12 +266,15 @@ func (db *DB) TicketStats(boardID string) (map[string]int, error) {
 	return counts, nil
 }
 
-func (db *DB) UpdateTicket(id string, fields map[string]any) error {
+func (db *DB) UpdateTicket(id string, fields map[string]any) (model.Ticket, error) {
 	if len(fields) == 0 {
-		return fmt.Errorf("no fields to update")
+		return model.Ticket{}, fmt.Errorf("no fields to update")
 	}
 	fields["updated_at"] = time.Now()
-	return db.conn.Model(&model.Ticket{}).Where("id = ?", id).Updates(fields).Error
+	if err := db.conn.Model(&model.Ticket{}).Where("id = ?", id).Updates(fields).Error; err != nil {
+		return model.Ticket{}, err
+	}
+	return db.GetTicket(id)
 }
 
 func (db *DB) DeleteTicket(id string) error {
@@ -285,6 +290,6 @@ func (db *DB) GetTicket(id string) (model.Ticket, error) {
 func (db *DB) ListTicketsMine(boardID, username string) ([]model.Ticket, error) {
 	var tickets []model.Ticket
 	err := db.conn.Where("board_id = ? AND (created_by = ? OR assignee = ?)", boardID, username, username).
-		Order("created_at desc").Find(&tickets).Error
+		Order("created_at desc").Limit(defaultListLimit).Find(&tickets).Error
 	return tickets, err
 }

@@ -83,7 +83,7 @@ type Server struct {
 	hub          *Hub
 	Echo         *echo.Echo
 	secret       string
-	allowedUsers []string
+	allowedUsers map[string]bool
 }
 
 type Option func(*Server)
@@ -93,7 +93,12 @@ func WithSecret(secret string) Option {
 }
 
 func WithAllowedUsers(users []string) Option {
-	return func(s *Server) { s.allowedUsers = users }
+	return func(s *Server) {
+		s.allowedUsers = make(map[string]bool, len(users))
+		for _, u := range users {
+			s.allowedUsers[strings.ToLower(u)] = true
+		}
+	}
 }
 
 func NewServer(db *DB, hub *Hub, opts ...Option) *Server {
@@ -663,15 +668,12 @@ func (s *Server) updateTicket(c echo.Context) error {
 		}
 		fields["assigned_by"] = username(c)
 	}
-	if err := s.db.UpdateTicket(tid, fields); err != nil {
+	ticket, err := s.db.UpdateTicket(tid, fields)
+	if err != nil {
 		log.Printf("ticket update error: %v", err)
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
 	s.hub.Broadcast(ticketChangedEvent)
-	ticket, err := s.db.GetTicket(tid)
-	if err != nil {
-		return jsonErr(c, http.StatusInternalServerError, "internal server error")
-	}
 	return c.JSON(http.StatusOK, ticket)
 }
 
