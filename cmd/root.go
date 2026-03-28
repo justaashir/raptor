@@ -6,10 +6,8 @@ import (
 	"net/http"
 	"os"
 	"raptor/client"
-	"raptor/tui"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 )
 
@@ -68,10 +66,7 @@ var rootCmd = &cobra.Command{
 		go checkForUpdate()
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		app := tui.NewApp(serverURL, authToken, activeWS, activeBoard)
-		p := tea.NewProgram(app, tea.WithAltScreen())
-		_, err := p.Run()
-		return err
+		return cmd.Help()
 	},
 }
 

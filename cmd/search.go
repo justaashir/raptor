@@ -29,7 +29,9 @@ var searchCmd = &cobra.Command{
 			fmt.Println("No tickets found.")
 			return nil
 		}
-		fmt.Println(renderTicketTable(tickets))
+		for _, tk := range tickets {
+			fmt.Printf("%-8s %-12s %-10s %s\n", tk.ID, tk.Status, tk.Assignee, tk.Title)
+		}
 		return nil
 	},
 }
