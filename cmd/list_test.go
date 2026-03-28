@@ -76,6 +76,20 @@ func TestRenderTicketTable_ShowsCountSummary(t *testing.T) {
 	}
 }
 
+func TestListCmd_HasLsAlias(t *testing.T) {
+	aliases := listCmd.Aliases
+	found := false
+	for _, a := range aliases {
+		if a == "ls" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected 'ls' alias, got %v", aliases)
+	}
+}
+
 func TestRenderTicketTable_SingleTicket_SingularCount(t *testing.T) {
 	tickets := []model.Ticket{
 		{ID: "a", Status: model.Todo, Title: "One"},

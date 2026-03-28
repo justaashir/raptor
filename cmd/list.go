@@ -38,8 +38,9 @@ var (
 )
 
 var listCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List tickets",
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "List tickets",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := requireBoard(); err != nil {
 			return err
@@ -57,9 +58,7 @@ var listCmd = &cobra.Command{
 			fmt.Println("No tickets found.")
 			return nil
 		}
-		for _, tk := range tickets {
-			fmt.Printf("%-8s %-12s %-10s %s\n", tk.ID, tk.Status, tk.Assignee, tk.Title)
-		}
+		fmt.Print(renderTicketTable(tickets))
 		return nil
 	},
 }
