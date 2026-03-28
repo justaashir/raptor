@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/charmbracelet/glamour"
 	"github.com/spf13/cobra"
 )
 
@@ -40,12 +39,7 @@ var showCmd = &cobra.Command{
 		fmt.Printf("Updated:  %s\n", ticket.UpdatedAt.Format("2006-01-02 15:04"))
 		if ticket.Content != "" {
 			fmt.Println()
-			rendered, err := glamour.Render(ticket.Content, "dark")
-			if err != nil {
-				fmt.Println(ticket.Content)
-			} else {
-				fmt.Print(rendered)
-			}
+			fmt.Println(ticket.Content)
 		}
 		return nil
 	},

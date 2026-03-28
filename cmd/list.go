@@ -3,11 +3,7 @@ package cmd
 import (
 	"fmt"
 	"raptor/client"
-	"raptor/model"
-	"raptor/tui"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/lipgloss/table"
 	"github.com/spf13/cobra"
 )
 
@@ -15,39 +11,6 @@ var (
 	listStatus string
 	listMine   bool
 )
-
-var headerStyle = lipgloss.NewStyle().Bold(true).Padding(0, 1)
-var cellStyle = lipgloss.NewStyle().Padding(0, 1)
-
-func renderTicketTable(tickets []model.Ticket) string {
-	t := table.New().
-		Border(lipgloss.RoundedBorder()).
-		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("238"))).
-		Headers("ID", "Status", "Title", "Assignee").
-		StyleFunc(func(row, col int) lipgloss.Style {
-			if row == table.HeaderRow {
-				return headerStyle
-			}
-			s := cellStyle
-			if col == 1 && row >= 0 && row < len(tickets) {
-				s = s.Foreground(tui.StatusColor(tickets[row].Status))
-			}
-			return s
-		})
-
-	for _, tk := range tickets {
-		t.Row(tk.ID, string(tk.Status), tk.Title, tk.Assignee)
-	}
-
-	rendered := t.Render()
-	tableWidth := lipgloss.Width(rendered)
-
-	title := lipgloss.NewStyle().Bold(true).Italic(true).
-		Width(tableWidth).Align(lipgloss.Center).
-		Render(fmt.Sprintf("Tickets (%d)", len(tickets)))
-
-	return fmt.Sprintf("%s\n%s", title, rendered)
-}
 
 var listCmd = &cobra.Command{
 	Use:   "list",
@@ -69,7 +32,9 @@ var listCmd = &cobra.Command{
 			fmt.Println("No tickets found.")
 			return nil
 		}
-		fmt.Println(renderTicketTable(tickets))
+		for _, tk := range tickets {
+			fmt.Printf("%-8s %-12s %-10s %s\n", tk.ID, tk.Status, tk.Assignee, tk.Title)
+		}
 		return nil
 	},
 }

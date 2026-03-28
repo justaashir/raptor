@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -29,9 +30,10 @@ type Ticket struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
-// GenID returns a new unique identifier.
+// GenID returns a short unique identifier (8 hex chars).
 func GenID() string {
-	return uuid.New().String()
+	id := uuid.New()
+	return fmt.Sprintf("%x", id[:4])
 }
 
 func NewTicket(title, content, createdBy string) Ticket {
