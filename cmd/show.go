@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"raptor/model"
 
+	"github.com/charmbracelet/glamour"
 	"github.com/spf13/cobra"
 )
 
@@ -16,7 +17,7 @@ func renderTicketView(tk model.Ticket) (string, error) {
 	if tk.Content != "" {
 		md += "\n---\n\n" + tk.Content + "\n"
 	}
-	return md, nil
+	return glamour.Render(md, "dark")
 }
 
 var showCmd = &cobra.Command{
