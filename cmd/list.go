@@ -3,9 +3,14 @@ package cmd
 import (
 	"fmt"
 	"raptor/client"
+	"raptor/model"
 
 	"github.com/spf13/cobra"
 )
+
+func formatTicketTable(tickets []model.Ticket) string {
+	return "ID\tSTATUS\tASSIGNEE\tTITLE\n"
+}
 
 var (
 	listStatus string
