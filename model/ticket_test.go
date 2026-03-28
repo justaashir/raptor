@@ -11,8 +11,8 @@ func TestNewTicket_HasIDTitleAndStatus(t *testing.T) {
 	if ticket.ID == "" {
 		t.Fatal("expected ticket to have an ID")
 	}
-	if len(ticket.ID) != 36 {
-		t.Fatalf("expected 36-char UUID, got %d: %q", len(ticket.ID), ticket.ID)
+	if len(ticket.ID) != 8 {
+		t.Fatalf("expected 8-char ID, got %d: %q", len(ticket.ID), ticket.ID)
 	}
 	if ticket.Title != "My first task" {
 		t.Fatalf("expected title %q, got %q", "My first task", ticket.Title)
@@ -38,8 +38,8 @@ func TestNewTicket_UniqueIDs(t *testing.T) {
 		if seen[tk.ID] {
 			t.Fatalf("duplicate ID: %s", tk.ID)
 		}
-		if len(tk.ID) < 20 {
-			t.Fatalf("ID too short (%d chars): %s — expected full UUID", len(tk.ID), tk.ID)
+		if len(tk.ID) != 8 {
+			t.Fatalf("expected 8-char ID, got %d: %q", len(tk.ID), tk.ID)
 		}
 		seen[tk.ID] = true
 	}
