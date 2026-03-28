@@ -2,16 +2,18 @@
 
 A multiplayer CLI kanban board with real-time sync.
 
+<img src="https://skillicons.dev/icons?i=go" alt="Go" height="40">
+
 ## Install
 
 ```bash
-go install github.com/yourusername/raptor@latest
+curl -fsSL https://raptor.raptorthree.com/install.sh | sh
 ```
 
 Or build from source:
 
 ```bash
-git clone https://github.com/yourusername/raptor && cd raptor
+git clone https://github.com/justaashir/raptor && cd raptor
 go build -o raptor .
 ```
 
