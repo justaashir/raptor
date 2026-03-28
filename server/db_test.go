@@ -103,20 +103,44 @@ func TestDB_UpdateTicket(t *testing.T) {
 	ticket := model.NewTicket("Original", "", "")
 	db.CreateTicket(ticket)
 
-	err := db.UpdateTicket(ticket.ID, map[string]any{
+	got, err := db.UpdateTicket(ticket.ID, map[string]any{
 		"title":  "Updated",
 		"status": "in_progress",
 	})
 	if err != nil {
 		t.Fatalf("failed to update: %v", err)
 	}
-
-	got, _ := db.GetTicket(ticket.ID)
 	if got.Title != "Updated" {
 		t.Fatalf("expected title %q, got %q", "Updated", got.Title)
 	}
 	if got.Status != model.InProgress {
 		t.Fatalf("expected status %q, got %q", model.InProgress, got.Status)
+	}
+}
+
+func TestDB_UpdateTicket_ReturnsUpdated(t *testing.T) {
+	db := newTestDB(t)
+	ticket := model.NewTicket("Original", "old content", "alice")
+	db.CreateTicket(ticket)
+
+	updated, err := db.UpdateTicket(ticket.ID, map[string]any{
+		"title":   "Changed",
+		"content": "new content",
+	})
+	if err != nil {
+		t.Fatalf("failed to update: %v", err)
+	}
+	if updated.Title != "Changed" {
+		t.Fatalf("expected title %q, got %q", "Changed", updated.Title)
+	}
+	if updated.Content != "new content" {
+		t.Fatalf("expected content %q, got %q", "new content", updated.Content)
+	}
+	if updated.ID != ticket.ID {
+		t.Fatalf("expected ID %q, got %q", ticket.ID, updated.ID)
+	}
+	if updated.CreatedBy != "alice" {
+		t.Fatalf("expected created_by preserved, got %q", updated.CreatedBy)
 	}
 }
 

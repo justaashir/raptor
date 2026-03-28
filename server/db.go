@@ -266,12 +266,15 @@ func (db *DB) TicketStats(boardID string) (map[string]int, error) {
 	return counts, nil
 }
 
-func (db *DB) UpdateTicket(id string, fields map[string]any) error {
+func (db *DB) UpdateTicket(id string, fields map[string]any) (model.Ticket, error) {
 	if len(fields) == 0 {
-		return fmt.Errorf("no fields to update")
+		return model.Ticket{}, fmt.Errorf("no fields to update")
 	}
 	fields["updated_at"] = time.Now()
-	return db.conn.Model(&model.Ticket{}).Where("id = ?", id).Updates(fields).Error
+	if err := db.conn.Model(&model.Ticket{}).Where("id = ?", id).Updates(fields).Error; err != nil {
+		return model.Ticket{}, err
+	}
+	return db.GetTicket(id)
 }
 
 func (db *DB) DeleteTicket(id string) error {

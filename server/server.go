@@ -663,15 +663,12 @@ func (s *Server) updateTicket(c echo.Context) error {
 		}
 		fields["assigned_by"] = username(c)
 	}
-	if err := s.db.UpdateTicket(tid, fields); err != nil {
+	ticket, err := s.db.UpdateTicket(tid, fields)
+	if err != nil {
 		log.Printf("ticket update error: %v", err)
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
 	s.hub.Broadcast(ticketChangedEvent)
-	ticket, err := s.db.GetTicket(tid)
-	if err != nil {
-		return jsonErr(c, http.StatusInternalServerError, "internal server error")
-	}
 	return c.JSON(http.StatusOK, ticket)
 }
 
