@@ -13,8 +13,13 @@ import (
 func renderTicketTable(tickets []model.Ticket) string {
 	var buf strings.Builder
 	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, formatTicketTable(tickets))
+	fmt.Fprint(w, formatTicketTable(tickets))
 	w.Flush()
+	noun := "tickets"
+	if len(tickets) == 1 {
+		noun = "ticket"
+	}
+	fmt.Fprintf(&buf, "\n%d %s\n", len(tickets), noun)
 	return buf.String()
 }
 

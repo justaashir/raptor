@@ -48,8 +48,8 @@ func TestRenderTicketTable_AlignedColumns(t *testing.T) {
 	}
 	got := renderTicketTable(tickets)
 	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
-	if len(lines) != 3 {
-		t.Fatalf("expected 3 lines (header + 2 rows), got %d: %q", len(lines), got)
+	if len(lines) < 3 {
+		t.Fatalf("expected at least 3 lines (header + 2 rows), got %d: %q", len(lines), got)
 	}
 	// Header should contain column names
 	if !strings.Contains(lines[0], "ID") || !strings.Contains(lines[0], "TITLE") {
@@ -61,5 +61,30 @@ func TestRenderTicketTable_AlignedColumns(t *testing.T) {
 	row2Pos := strings.Index(lines[2], "in_progress")
 	if headerPos != row1Pos || headerPos != row2Pos {
 		t.Fatalf("STATUS column not aligned: header=%d, row1=%d, row2=%d", headerPos, row1Pos, row2Pos)
+	}
+}
+
+func TestRenderTicketTable_ShowsCountSummary(t *testing.T) {
+	tickets := []model.Ticket{
+		{ID: "a", Status: model.Todo, Title: "One"},
+		{ID: "b", Status: model.Done, Title: "Two"},
+		{ID: "c", Status: model.Todo, Title: "Three"},
+	}
+	got := renderTicketTable(tickets)
+	if !strings.Contains(got, "3 tickets") {
+		t.Fatalf("expected count summary '3 tickets', got %q", got)
+	}
+}
+
+func TestRenderTicketTable_SingleTicket_SingularCount(t *testing.T) {
+	tickets := []model.Ticket{
+		{ID: "a", Status: model.Todo, Title: "One"},
+	}
+	got := renderTicketTable(tickets)
+	if !strings.Contains(got, "1 ticket") {
+		t.Fatalf("expected '1 ticket', got %q", got)
+	}
+	if strings.Contains(got, "1 tickets") {
+		t.Fatalf("should be singular '1 ticket', not '1 tickets'")
 	}
 }
