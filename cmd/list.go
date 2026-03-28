@@ -4,12 +4,18 @@ import (
 	"fmt"
 	"raptor/client"
 	"raptor/model"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
 
 func formatTicketTable(tickets []model.Ticket) string {
-	return "ID\tSTATUS\tASSIGNEE\tTITLE\n"
+	var b strings.Builder
+	b.WriteString("ID\tSTATUS\tASSIGNEE\tTITLE\n")
+	for _, tk := range tickets {
+		fmt.Fprintf(&b, "%s\t%s\t%s\t%s\n", tk.ID, tk.Status, tk.Assignee, tk.Title)
+	}
+	return b.String()
 }
 
 var (
