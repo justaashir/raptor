@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"raptor/model"
 	"testing"
 )
@@ -646,6 +647,69 @@ func TestDB_CascadeDeleteHandledInAppCode(t *testing.T) {
 	tickets, _ := db.ListTickets("bd1", "")
 	if len(tickets) != 0 {
 		t.Fatalf("expected 0 tickets after board delete, got %d (app cascade broken!)", len(tickets))
+	}
+}
+
+func TestDB_ListTickets_DefaultLimit(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateWorkspace("ws1", "Team", "alice")
+	db.CreateBoard("bd1", "ws1", "Board", "alice", model.DefaultStatuses)
+
+	for i := 0; i < 600; i++ {
+		tk := model.NewTicket(fmt.Sprintf("Task %d", i), "", "alice")
+		tk.BoardID = "bd1"
+		db.CreateTicket(tk)
+	}
+
+	tickets, err := db.ListTickets("bd1", "")
+	if err != nil {
+		t.Fatalf("failed to list: %v", err)
+	}
+	if len(tickets) > 500 {
+		t.Fatalf("expected at most 500 tickets (default limit), got %d", len(tickets))
+	}
+	if len(tickets) != 500 {
+		t.Fatalf("expected exactly 500 tickets, got %d", len(tickets))
+	}
+}
+
+func TestDB_SearchTickets_DefaultLimit(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateWorkspace("ws1", "Team", "alice")
+	db.CreateBoard("bd1", "ws1", "Board", "alice", model.DefaultStatuses)
+
+	for i := 0; i < 600; i++ {
+		tk := model.NewTicket(fmt.Sprintf("Bug %d", i), "", "alice")
+		tk.BoardID = "bd1"
+		db.CreateTicket(tk)
+	}
+
+	tickets, err := db.SearchTickets("bd1", "Bug")
+	if err != nil {
+		t.Fatalf("failed to search: %v", err)
+	}
+	if len(tickets) > 500 {
+		t.Fatalf("expected at most 500 tickets (default limit), got %d", len(tickets))
+	}
+}
+
+func TestDB_ListTicketsMine_DefaultLimit(t *testing.T) {
+	db := newTestDB(t)
+	db.CreateWorkspace("ws1", "Team", "alice")
+	db.CreateBoard("bd1", "ws1", "Board", "alice", model.DefaultStatuses)
+
+	for i := 0; i < 600; i++ {
+		tk := model.NewTicket(fmt.Sprintf("Task %d", i), "", "alice")
+		tk.BoardID = "bd1"
+		db.CreateTicket(tk)
+	}
+
+	tickets, err := db.ListTicketsMine("bd1", "alice")
+	if err != nil {
+		t.Fatalf("failed to list mine: %v", err)
+	}
+	if len(tickets) > 500 {
+		t.Fatalf("expected at most 500 tickets (default limit), got %d", len(tickets))
 	}
 }
 
