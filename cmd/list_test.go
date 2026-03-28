@@ -23,3 +23,19 @@ func TestFormatTicketTable_OneTicket_ReturnsHeaderAndRow(t *testing.T) {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }
+
+func TestFormatTicketTable_MultipleTickets_AllRowsPresent(t *testing.T) {
+	tickets := []model.Ticket{
+		{ID: "aaa11111", Status: model.Todo, Assignee: "alice", Title: "First"},
+		{ID: "bbb22222", Status: model.InProgress, Assignee: "bob", Title: "Second"},
+		{ID: "ccc33333", Status: model.Done, Assignee: "", Title: "Third"},
+	}
+	got := formatTicketTable(tickets)
+	want := "ID\tSTATUS\tASSIGNEE\tTITLE\n" +
+		"aaa11111\ttodo\talice\tFirst\n" +
+		"bbb22222\tin_progress\tbob\tSecond\n" +
+		"ccc33333\tdone\t\tThird\n"
+	if got != want {
+		t.Fatalf("got %q, want %q", got, want)
+	}
+}
