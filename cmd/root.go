@@ -3,10 +3,8 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"raptor/client"
-	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -112,8 +110,7 @@ func newUnscopedClient() *client.Client {
 
 // fetchServerVersion returns the server's version string, or "" on error.
 func fetchServerVersion() string {
-	c := &http.Client{Timeout: 5 * time.Second}
-	resp, err := c.Get(serverURL + "/api/version")
+	resp, err := httpClient.Get(serverURL + "/api/version")
 	if err != nil {
 		return ""
 	}
