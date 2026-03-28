@@ -2,9 +2,18 @@ package cmd
 
 import (
 	"fmt"
+	"raptor/model"
 
 	"github.com/spf13/cobra"
 )
+
+func renderTicketView(tk model.Ticket) (string, error) {
+	return fmt.Sprintf("# %s\n\n**ID:** %s | **Status:** %s | **Created by:** %s | **Assignee:** %s\n**Created:** %s | **Updated:** %s\n",
+		tk.Title, tk.ID, tk.Status, tk.CreatedBy, tk.Assignee,
+		tk.CreatedAt.Format("2006-01-02 15:04"),
+		tk.UpdatedAt.Format("2006-01-02 15:04"),
+	), nil
+}
 
 var showCmd = &cobra.Command{
 	Use:   "show <id>",
