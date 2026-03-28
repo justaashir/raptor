@@ -8,11 +8,13 @@ import (
 )
 
 type Config struct {
-	Server    string `json:"server"`
-	Token     string `json:"token"`
-	Username  string `json:"username"`
-	Workspace string `json:"workspace,omitempty"`
-	Board     string `json:"board,omitempty"`
+	Server          string `json:"server"`
+	Token           string `json:"token"`
+	Username        string `json:"username"`
+	Workspace       string `json:"workspace,omitempty"`
+	Board           string `json:"board,omitempty"`
+	LastUpdateCheck int64  `json:"last_update_check,omitempty"`
+	LatestVersion   string `json:"latest_version,omitempty"`
 }
 
 func configPath() (string, error) {
