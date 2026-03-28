@@ -82,13 +82,7 @@ func (s *Server) handleAuth(c echo.Context) error {
 		return jsonErr(c, http.StatusInternalServerError, "internal server error")
 	}
 	if !isMember {
-		allowed := false
-		for _, u := range s.allowedUsers {
-			if strings.EqualFold(u, input.Username) {
-				allowed = true
-				break
-			}
-		}
+		allowed := s.allowedUsers[strings.ToLower(input.Username)]
 		if !allowed && len(s.allowedUsers) == 0 {
 			var count int64
 			s.db.conn.Model(&model.WorkspaceMember{}).Count(&count)

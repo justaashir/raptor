@@ -83,7 +83,7 @@ type Server struct {
 	hub          *Hub
 	Echo         *echo.Echo
 	secret       string
-	allowedUsers []string
+	allowedUsers map[string]bool
 }
 
 type Option func(*Server)
@@ -93,7 +93,12 @@ func WithSecret(secret string) Option {
 }
 
 func WithAllowedUsers(users []string) Option {
-	return func(s *Server) { s.allowedUsers = users }
+	return func(s *Server) {
+		s.allowedUsers = make(map[string]bool, len(users))
+		for _, u := range users {
+			s.allowedUsers[strings.ToLower(u)] = true
+		}
+	}
 }
 
 func NewServer(db *DB, hub *Hub, opts ...Option) *Server {
